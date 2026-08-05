@@ -120,6 +120,47 @@ docker compose -f docker-compose.casaos.yml pull
 docker compose -f docker-compose.casaos.yml up -d
 ```
 
+## Gate setup walkthrough
+
+After Gate Control is running, open its Web UI and select **Gate setup** in the bottom navigation. Existing gates appear under **Configured endpoints**. Select **Add gate** to configure the first gate.
+
+![Gate Setup desktop view](docs/setup-guide/01-gate-setup-desktop.jpg)
+
+The same setup screen works on phones. Each configured gate includes controls for ordering, cloning, editing, opening advanced settings, and deleting.
+
+![Gate Setup mobile view](docs/setup-guide/02-gate-setup-mobile.jpg)
+
+### Add the gate and MQTT broker
+
+In **Identity & behavior**, enter the gate name, Property, Location, animation style, and graphic tap action. Property and Location are case-sensitive and are used to build the Turnage Automation topic defaults.
+
+In **MQTT broker**, enter the WebSocket connection supplied by the broker administrator:
+
+- Protocol: normally `wss://` for remote access or `ws://` for trusted LAN testing
+- Host: broker hostname or LAN IP address
+- Port: the Mosquitto WebSocket listener port
+- Base path: normally `mqtt`
+- Encryption and certificate validation: enable both for `wss://`
+- Username and password: use an MQTT account restricted to this gate's topics
+
+![Add Gate form on mobile](docs/setup-guide/03-add-gate-mobile.jpg)
+
+Review every generated topic before saving. Gate Control blocks a save if any MQTT topic duplicates a topic assigned to another gate. Select **Test connection** to authenticate, subscribe to the configured status topics, and preview received values before saving.
+
+### Advanced gate settings
+
+Press and hold a gate's **Edit** button for five seconds to open **Advanced gate settings**. This page contains primary commands, broker status, traffic, automatic timer, RTC clock, input/output status fields, safety controls, live subscribed values, and gate-state mapping.
+
+![Advanced MQTT settings](docs/setup-guide/04-advanced-mqtt-settings.jpg)
+
+Automatic open and close times use a 12-hour picker in the app and publish the controller's required four-digit 24-hour payload.
+
+![Schedule time picker](docs/setup-guide/05-schedule-time-picker.jpg)
+
+Return to **Gates** and confirm that the gate shows **Connected** and reports its current state. Test controls while physically observing the gate and its safety devices.
+
+Gate configuration and credentials remain in that browser's local device storage. Repeat the gate setup on every phone, tablet, or computer that will operate Gate Control. Adding the site to a mobile home screen does not synchronize configuration between devices.
+
 ## PWA installation
 
 - Android/Chrome: open the HTTPS app URL and choose **Install app**.
