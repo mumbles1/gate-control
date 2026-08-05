@@ -1,0 +1,12 @@
+tunnel: YOUR_TUNNEL_UUID
+credentials-file: /etc/cloudflared/YOUR_TUNNEL_UUID.json
+
+ingress:
+  - hostname: gates.example.com
+    service: http://gate-control:3000
+  - hostname: gate-one-mqtt.example.com
+    # A Mosquitto WebSocket listener is HTTP during its Upgrade handshake.
+    service: http://192.168.1.20:9001
+  - hostname: gate-two-mqtt.example.com
+    service: http://192.168.1.20:9002
+  - service: http_status:404

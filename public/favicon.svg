@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Gate Control half-open swing gate icon">
+  <rect width="512" height="512" rx="104" fill="#132936"/>
+  <path d="M62 412h388" stroke="#B8C8CE" stroke-width="20" stroke-linecap="round"/>
+  <rect x="72" y="112" width="50" height="300" rx="12" fill="#E9F1EC"/>
+  <rect x="390" y="112" width="50" height="300" rx="12" fill="#E9F1EC"/>
+  <path d="M122 166l102 38v148l-102 22V166Z" fill="#274958" stroke="#E9F1EC" stroke-width="18" stroke-linejoin="round"/>
+  <path d="M390 166l-102 38v148l102 22V166Z" fill="#274958" stroke="#E9F1EC" stroke-width="18" stroke-linejoin="round"/>
+  <path d="M160 180v186M196 193v166M352 180v186M316 193v166" stroke="#7896A2" stroke-width="11"/>
+  <path d="M130 232l86 22M130 304l86 10M382 232l-86 22M382 304l-86 10" stroke="#7896A2" stroke-width="11" stroke-linecap="round"/>
+</svg>

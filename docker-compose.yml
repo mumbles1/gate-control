@@ -1,0 +1,15 @@
+services:
+  gate-control:
+    build:
+      context: .
+    image: gate-control:local
+    container_name: gate-control
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_APP_URL: "https://gates.example.com"
+    ports:
+      - "3080:3000"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
