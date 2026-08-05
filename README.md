@@ -66,6 +66,53 @@ In CasaOS, select **App Store → Install a customized app → Import Compose**,
 
 The CasaOS app exposes local port 3080. Gate configuration is stored in each browser, so the app container requires no data volume or database.
 
+### Complete CasaOS Compose example
+
+Replace `YOUR_CASAOS_IP` with the LAN address of the CasaOS machine, then paste this YAML into CasaOS **Import Compose**:
+
+```yaml
+name: gate-control
+services:
+  gate-control:
+    image: ghcr.io/mumbles1/gate-control:v1.0.0
+    container_name: gate-control
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_APP_URL: "http://YOUR_CASAOS_IP:3080"
+    ports:
+      - target: 3000
+        published: "3080"
+        protocol: tcp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    x-casaos:
+      envs:
+        - container: NEXT_PUBLIC_APP_URL
+          description:
+            en_us: Gate Control WebUI address
+      ports:
+        - container: "3000"
+          description:
+            en_us: Gate Control WebUI
+x-casaos:
+  architectures: [amd64, arm64]
+  main: gate-control
+  author: Turnage Automation
+  category: Home Automation
+  description:
+    en_us: MQTT multi-gate monitoring and control PWA
+  icon: https://raw.githubusercontent.com/mumbles1/gate-control/main/public/icon-512.png
+  index: /
+  port_map: "3080"
+  scheme: http
+  title:
+    en_us: Gate Control
+```
+
+CasaOS WebUI values: scheme `http`, host port `3080`, container port `3000`, and path `/`. No volume mounts are required.
+
 Update a `latest` installation from the CasaOS interface, or from a terminal with:
 
 ```bash
