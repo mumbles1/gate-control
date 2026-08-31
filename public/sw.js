@@ -1,4 +1,4 @@
-const CACHE = "gate-control-v8";
+const CACHE = "gate-control-v9";
 const SHELL = ["/", "/offline.html", "/manifest.webmanifest", "/gate-icon.svg", "/icon-192.png", "/icon-512.png", "/apple-touch-icon.png"];
 
 async function fetchWithTimeout(request, milliseconds) {
@@ -11,6 +11,10 @@ async function fetchWithTimeout(request, milliseconds) {
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(SHELL)));
   self.skipWaiting();
+});
+
+self.addEventListener("message", (event) => {
+  if (event.data?.type === "SKIP_WAITING") self.skipWaiting();
 });
 
 self.addEventListener("activate", (event) => {

@@ -24,6 +24,8 @@ type Screen =
   | { name: "detail"; gateId: string }
   | { name: "editor"; gate: GateConfiguration; cloneDraft?: boolean; advanced?: boolean };
 
+const APP_VERSION = "1.1.0";
+
 const stateLabels: Record<GateState, string> = {
   open: "Open",
   closed: "Closed",
@@ -292,6 +294,7 @@ export function GateControlApp() {
   const [pendingGateTransferToken, setPendingGateTransferToken] = useState("");
   const [qrShare, setQRShare] = useState<{ dataUrl: string; url: string; gateName: string; expiresAt: number } | null>(null);
   const [serverReachable, setServerReachable] = useState<boolean | undefined>(undefined);
+  const [updateMessage, setUpdateMessage] = useState("");
   const transferFileInput = useRef<HTMLInputElement>(null);
   const detailOpenedAt = useRef(0);
   const { runtime, publish, publishAdvanced } = useMQTTManager(gates);
@@ -317,7 +320,19 @@ export function GateControlApp() {
       setMQTTTransferGateId(savedGates.some((gate) => gate.id === savedTransferGateId) ? savedTransferGateId : (savedGates[0]?.id ?? ""));
       setLoaded(true);
     });
-    navigator.serviceWorker?.register("/sw.js").catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    if (!("serviceWorker" in navigator)) return;
+    let reloading = false;
+    const reloadForUpdate = () => {
+      if (reloading) return;
+      reloading = true;
+      window.location.reload();
+    };
+    navigator.serviceWorker.addEventListener("controllerchange", reloadForUpdate);
+    void navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" }).then((registration) => registration.update()).catch(() => undefined);
+    return () => navigator.serviceWorker.removeEventListener("controllerchange", reloadForUpdate);
   }, []);
 
   useEffect(() => {
@@ -407,6 +422,28 @@ export function GateControlApp() {
     try { await testScheduleAlert(alertIdentity); setAlertMessage("Test notification sent."); }
     catch (error) { setAlertMessage(error instanceof Error ? error.message : "Could not send a test notification."); }
     finally { setAlertBusy(false); }
+  };
+
+  const checkForAppUpdate = async () => {
+    setUpdateMessage("Checking for the latest version…");
+    try {
+      if (!("serviceWorker" in navigator)) throw new Error("Updates are checked when the app is reopened.");
+      const registration = await navigator.serviceWorker.getRegistration();
+      if (!registration) {
+        await navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" });
+        setUpdateMessage("Update service installed. Reopen the app once.");
+        return;
+      }
+      await registration.update();
+      if (registration.waiting) {
+        setUpdateMessage("Installing update…");
+        registration.waiting.postMessage({ type: "SKIP_WAITING" });
+      } else {
+        setUpdateMessage(`Gate Control ${APP_VERSION} is current.`);
+      }
+    } catch (error) {
+      setUpdateMessage(error instanceof Error ? error.message : "Could not check for updates.");
+    }
   };
 
   const makeConfigurationBundle = (scope: "app" | "gate" = transferScope): ConfigurationBundle => ({
@@ -757,7 +794,7 @@ export function GateControlApp() {
               <p className="transfer-note">Transfers include MQTT credentials, so always use a strong passphrase and restrict this topic with Mosquitto ACLs. Full-app imports replace this device's gates; one-gate imports add or update only that gate. Push permission and notification device identity are never cloned. QR transfers expire after 10 minutes.</p>
             </div>
           </section>
-          <section className="security-card"><span><GateBrandIcon /></span><div><h2>Gate Control</h2><p>Built for Turnage Automation gate integration systems. Configuration stays on this device unless notifications or configuration transfer are used; every exported or published transfer is encrypted.</p></div></section>
+          <section className="security-card app-version-card"><span><GateBrandIcon /></span><div><h2>Gate Control</h2><p>Built for Turnage Automation gate integration systems. Configuration stays on this device unless notifications or configuration transfer are used; every exported or published transfer is encrypted.</p><small>Version {APP_VERSION}</small>{updateMessage && <small role="status">{updateMessage}</small>}</div><button type="button" className="secondary-button" onClick={() => void checkForAppUpdate()}><RefreshCw /> Check for updates</button></section>
         </main>
         {qrShare && <div className="qr-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setQRShare(null); }}><section className="qr-dialog" role="dialog" aria-modal="true" aria-labelledby="gate-qr-title"><header><div><p className="eyebrow">Encrypted gate transfer</p><h2 id="gate-qr-title">Share {qrShare.gateName}</h2></div><button type="button" className="icon-button" aria-label="Close QR code" onClick={() => setQRShare(null)}><X /></button></header><img src={qrShare.dataUrl} alt={`QR code for sharing ${qrShare.gateName}`} /><p>On the other device, scan this code with its camera. Open Gate Control, enter the same passphrase, then import the shared gate.</p><strong>Expires {new Date(qrShare.expiresAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</strong><a className="secondary-button" href={qrShare.url} target="_blank" rel="noreferrer"><QrCode /> Open link on this device</a></section></div>}
         <AppNav screen={screen} onDashboard={() => setScreen({ name: "dashboard" })} onSetup={() => setScreen({ name: "setup" })} onAppSettings={() => setScreen({ name: "appSettings" })} />
