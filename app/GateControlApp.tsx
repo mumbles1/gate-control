@@ -9,6 +9,7 @@ import {
 import { GateArtwork } from "./GateArtwork";
 import { GateEditor } from "./GateEditor";
 import { ConfigurationQRScanner } from "./ConfigurationQRScanner";
+import { APP_VERSION } from "./app-version";
 import { useMQTTManager } from "./mqtt-service";
 import { gateStorage } from "./storage";
 import { createGateTransfer, decryptConfiguration, downloadConfiguration, encryptConfiguration, gateTransferQRCode, loadConfigurationFromMQTT, loadGateTransfer, publishConfigurationToMQTT, shareConfiguration } from "./configuration-transfer";
@@ -24,8 +25,6 @@ type Screen =
   | { name: "appSettings" }
   | { name: "detail"; gateId: string }
   | { name: "editor"; gate: GateConfiguration; cloneDraft?: boolean; advanced?: boolean };
-
-const APP_VERSION = "1.1.4";
 
 const stateLabels: Record<GateState, string> = {
   open: "Open",
@@ -299,6 +298,7 @@ export function GateControlApp() {
   const [qrScannerOpen, setQRScannerOpen] = useState(false);
   const [serverReachable, setServerReachable] = useState<boolean | undefined>(undefined);
   const [updateMessage, setUpdateMessage] = useState("");
+  const [updateBusy, setUpdateBusy] = useState(false);
   const transferFileInput = useRef<HTMLInputElement>(null);
   const detailOpenedAt = useRef(0);
   const { runtime, publish, publishAdvanced } = useMQTTManager(gates);
@@ -429,25 +429,58 @@ export function GateControlApp() {
   };
 
   const checkForAppUpdate = async () => {
+    if (updateBusy) return;
+    setUpdateBusy(true);
     setUpdateMessage("Checking for the latest version…");
     try {
       if (!("serviceWorker" in navigator)) throw new Error("Updates are checked when the app is reopened.");
-      const registration = await navigator.serviceWorker.getRegistration();
-      if (!registration) {
-        await navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" });
-        setUpdateMessage("Update service installed. Reopen the app once.");
+      const versionResponse = await fetch(`/api/health?updateCheck=${Date.now()}`, { cache: "no-store", signal: AbortSignal.timeout(5_000) });
+      if (!versionResponse.ok) throw new Error("The app server could not be reached.");
+      const serverInfo = await versionResponse.json() as { version?: string };
+      const serverVersion = serverInfo.version;
+      let registration = await navigator.serviceWorker.getRegistration();
+      if (!registration) registration = await navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" });
+
+      let foundWorker = registration.installing ?? registration.waiting;
+      const updateFound = new Promise<ServiceWorker | null>((resolve) => {
+        const timeout = window.setTimeout(() => resolve(null), 4_000);
+        registration.addEventListener("updatefound", () => {
+          window.clearTimeout(timeout);
+          resolve(registration.installing);
+        }, { once: true });
+      });
+      await registration.update();
+      foundWorker = registration.waiting ?? registration.installing ?? foundWorker ?? await updateFound;
+
+      if (foundWorker && foundWorker.state !== "activated" && foundWorker.state !== "redundant") {
+        setUpdateMessage("Update found. Installing…");
+        await new Promise<void>((resolve) => {
+          const timeout = window.setTimeout(resolve, 15_000);
+          const checkState = () => {
+            if (["installed", "activating", "activated", "redundant"].includes(foundWorker!.state)) {
+              window.clearTimeout(timeout);
+              resolve();
+            }
+          };
+          foundWorker!.addEventListener("statechange", checkState);
+          checkState();
+        });
+      }
+
+      const waiting = registration.waiting;
+      if (waiting) {
+        setUpdateMessage("Installing update. Gate Control will reopen automatically…");
+        waiting.postMessage({ type: "SKIP_WAITING" });
         return;
       }
-      await registration.update();
-      if (registration.waiting) {
-        setUpdateMessage("Installing update…");
-        registration.waiting.postMessage({ type: "SKIP_WAITING" });
-      } else {
-        setUpdateMessage(`Gate Control ${APP_VERSION} is current.`);
+      if (serverVersion && serverVersion !== APP_VERSION) {
+        setUpdateMessage(`Version ${serverVersion} is available. Close and reopen Gate Control if it does not refresh automatically.`);
+        return;
       }
+      setUpdateMessage(`Gate Control ${APP_VERSION} is current.`);
     } catch (error) {
       setUpdateMessage(error instanceof Error ? error.message : "Could not check for updates.");
-    }
+    } finally { setUpdateBusy(false); }
   };
 
   const makeConfigurationBundle = (scope: "app" | "gate" = transferScope): ConfigurationBundle => ({
@@ -825,7 +858,7 @@ export function GateControlApp() {
               <p className="transfer-note">Transfers include MQTT credentials, so always use a strong passphrase and restrict this topic with Mosquitto ACLs. Full-app imports replace this device's gates; one-gate imports add or update only that gate. Push permission and notification device identity are never cloned. QR transfers expire after 10 minutes.</p>
             </div>
           </section>
-          <section className="security-card app-version-card"><span><GateBrandIcon /></span><div><h2>Gate Control</h2><p>Built for Turnage Automation gate integration systems. Configuration stays on this device unless notifications or configuration transfer are used; every exported or published transfer is encrypted.</p><small>Version {APP_VERSION}</small>{updateMessage && <small role="status">{updateMessage}</small>}</div><button type="button" className="secondary-button" onClick={() => void checkForAppUpdate()}><RefreshCw /> Check for updates</button></section>
+          <section className="security-card app-version-card"><span><GateBrandIcon /></span><div><h2>Gate Control</h2><p>Built for Turnage Automation gate integration systems. Configuration stays on this device unless notifications or configuration transfer are used; every exported or published transfer is encrypted.</p><small>Version {APP_VERSION}</small>{updateMessage && <p className="update-status" role="status" aria-live="polite">{updateMessage}</p>}</div><button type="button" className="secondary-button" disabled={updateBusy} onClick={() => void checkForAppUpdate()}><RefreshCw className={updateBusy ? "spin" : ""} /> {updateBusy ? "Checking…" : "Check for updates"}</button></section>
         </main>
         {qrShare && <div className="qr-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setQRShare(null); }}><section className="qr-dialog" role="dialog" aria-modal="true" aria-labelledby="gate-qr-title"><header><div><p className="eyebrow">Encrypted configuration transfer</p><h2 id="gate-qr-title">Share {qrShare.transferName}</h2></div><button type="button" className="icon-button" aria-label="Close QR code" onClick={() => setQRShare(null)}><X /></button></header><img src={qrShare.dataUrl} alt={`QR code for sharing ${qrShare.transferName}`} /><p>In the installed Gate Control app on the iPhone, open App settings, select Scan QR, enter the same passphrase, then import the shared configuration.</p><strong>Expires {new Date(qrShare.expiresAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</strong><a className="secondary-button" href={qrShare.url} target="_blank" rel="noreferrer"><QrCode /> Open link on this device</a></section></div>}
         {qrScannerOpen && <ConfigurationQRScanner onClose={() => setQRScannerOpen(false)} onScan={acceptScannedConfiguration} />}
