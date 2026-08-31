@@ -160,7 +160,12 @@ export async function loadGateTransfer(token: string): Promise<string> {
 }
 
 export function gateTransferQRCode(url: string): Promise<string> {
-  return QRCode.toDataURL(url, { width: 340, margin: 2, errorCorrectionLevel: "M", color: { dark: "#102831", light: "#ffffff" } });
+  return QRCode.toDataURL(url, {
+    width: 560,
+    margin: 5,
+    errorCorrectionLevel: "H",
+    color: { dark: "#000000", light: "#ffffff" },
+  });
 }
 
 function transferOptions(gate: GateConfiguration): IClientOptions {
