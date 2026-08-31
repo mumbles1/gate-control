@@ -31,6 +31,7 @@ export interface ConfigurationBundle {
 interface GateTransferResponse {
   token: string;
   expiresAt: number;
+  url: string;
 }
 
 interface EncryptedEnvelope {
@@ -150,16 +151,12 @@ async function transferApi(body: unknown) {
 
 export async function createGateTransfer(payload: string): Promise<GateTransferResponse> {
   const result = await transferApi({ action: "create-transfer", payload });
-  return { token: String(result.token || ""), expiresAt: Number(result.expiresAt || 0) };
+  return { token: String(result.token || ""), expiresAt: Number(result.expiresAt || 0), url: String(result.url || "") };
 }
 
 export async function loadGateTransfer(token: string): Promise<string> {
   const result = await transferApi({ action: "get-transfer", token });
   return String(result.payload || "");
-}
-
-export function gateTransferUrl(token: string) {
-  return `${window.location.origin}/?gateTransfer=${encodeURIComponent(token)}`;
 }
 
 export function gateTransferQRCode(url: string): Promise<string> {

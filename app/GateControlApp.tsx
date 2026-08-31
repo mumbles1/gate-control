@@ -10,7 +10,7 @@ import { GateArtwork } from "./GateArtwork";
 import { GateEditor } from "./GateEditor";
 import { useMQTTManager } from "./mqtt-service";
 import { gateStorage } from "./storage";
-import { createGateTransfer, decryptConfiguration, downloadConfiguration, encryptConfiguration, gateTransferQRCode, gateTransferUrl, loadConfigurationFromMQTT, loadGateTransfer, publishConfigurationToMQTT, shareConfiguration } from "./configuration-transfer";
+import { createGateTransfer, decryptConfiguration, downloadConfiguration, encryptConfiguration, gateTransferQRCode, loadConfigurationFromMQTT, loadGateTransfer, publishConfigurationToMQTT, shareConfiguration } from "./configuration-transfer";
 import type { ConfigurationBundle } from "./configuration-transfer";
 import { createAlertIdentity, disableScheduleAlerts, enableScheduleAlerts, scheduleAlertState, syncScheduleAlerts, testScheduleAlert } from "./notifications";
 import type { AlertIdentity, ScheduleAlertState } from "./notifications";
@@ -24,7 +24,7 @@ type Screen =
   | { name: "detail"; gateId: string }
   | { name: "editor"; gate: GateConfiguration; cloneDraft?: boolean; advanced?: boolean };
 
-const APP_VERSION = "1.1.1";
+const APP_VERSION = "1.1.2";
 
 const stateLabels: Record<GateState, string> = {
   open: "Open",
@@ -285,6 +285,7 @@ export function GateControlApp() {
   const [notificationContactEmail, setNotificationContactEmail] = useState("");
   const [controllerOfflineDelay, setControllerOfflineDelay] = useState("15");
   const [transferPassphrase, setTransferPassphrase] = useState("");
+  const [showTransferPassphrase, setShowTransferPassphrase] = useState(false);
   const [mqttTransferTopic, setMQTTTransferTopic] = useState("TurnageAutomation/GateControl/settings");
   const [mqttTransferRetain, setMQTTTransferRetain] = useState(true);
   const [mqttTransferGateId, setMQTTTransferGateId] = useState("");
@@ -293,7 +294,7 @@ export function GateControlApp() {
   const [transferMessage, setTransferMessage] = useState("");
   const [preparedSharePayload, setPreparedSharePayload] = useState("");
   const [pendingGateTransferToken, setPendingGateTransferToken] = useState("");
-  const [qrShare, setQRShare] = useState<{ dataUrl: string; url: string; gateName: string; expiresAt: number } | null>(null);
+  const [qrShare, setQRShare] = useState<{ dataUrl: string; url: string; transferName: string; expiresAt: number } | null>(null);
   const [serverReachable, setServerReachable] = useState<boolean | undefined>(undefined);
   const [updateMessage, setUpdateMessage] = useState("");
   const transferFileInput = useRef<HTMLInputElement>(null);
@@ -542,16 +543,22 @@ export function GateControlApp() {
   };
 
   const shareGateByQRCode = async () => {
-    setTransferBusy(true); setTransferMessage("Creating encrypted gate QR code…");
+    setTransferBusy(true); setTransferMessage("Creating encrypted configuration QR code…");
     try {
       ensureTransferPassphrase();
-      const gate = transferGate(); if (!gate) throw new Error("Select a gate to share.");
-      const payload = await encryptConfiguration(makeConfigurationBundle("gate"), transferPassphrase);
+      const gate = transferGate();
+      if (transferScope === "gate" && !gate) throw new Error("Select a gate to share.");
+      const bundle = makeConfigurationBundle(transferScope);
+      if (!bundle.gates.length) throw new Error("There are no gates to share.");
+      const payload = await encryptConfiguration(bundle, transferPassphrase);
       const transfer = await createGateTransfer(payload);
-      const url = gateTransferUrl(transfer.token);
-      setQRShare({ dataUrl: await gateTransferQRCode(url), url, gateName: gate.name, expiresAt: transfer.expiresAt });
-      setTransferMessage("Gate QR code created. It expires in 10 minutes.");
-    } catch (error) { setTransferMessage(error instanceof Error ? error.message : "Could not create the gate QR code."); }
+      if (!transfer.url) throw new Error("The app server did not provide a transfer address.");
+      const shareHost = new URL(transfer.url).hostname.toLowerCase();
+      if (["localhost", "127.0.0.1", "::1"].includes(shareHost)) throw new Error("Open Gate Control in Chrome using the server LAN IP or public hostname instead of localhost, then create the QR code again.");
+      const transferName = transferScope === "gate" ? gate!.name : "all gates and app settings";
+      setQRShare({ dataUrl: await gateTransferQRCode(transfer.url), url: transfer.url, transferName, expiresAt: transfer.expiresAt });
+      setTransferMessage("Configuration QR code created. It expires in 10 minutes.");
+    } catch (error) { setTransferMessage(error instanceof Error ? error.message : "Could not create the configuration QR code."); }
     finally { setTransferBusy(false); }
   };
 
@@ -561,11 +568,10 @@ export function GateControlApp() {
     try {
       ensureTransferPassphrase();
       const bundle = await decryptConfiguration(await loadGateTransfer(pendingGateTransferToken), transferPassphrase);
-      if (bundle.scope !== "gate") throw new Error("This QR code does not contain one shared gate.");
       if (applyConfigurationBundle(bundle)) {
         setPendingGateTransferToken("");
         window.history.replaceState({}, "", `${window.location.pathname}${window.location.hash}`);
-        setTransferMessage("Shared gate imported. Review and test its broker connection before operating it.");
+        setTransferMessage(bundle.scope === "gate" ? "Shared gate imported. Review and test its broker connection before operating it." : "Shared app configuration imported. Review and test each broker connection before operating gates.");
       }
     } catch (error) { setTransferMessage(error instanceof Error ? error.message : "Could not import the shared gate."); }
     finally { setTransferBusy(false); }
@@ -592,7 +598,7 @@ export function GateControlApp() {
       const payload = await encryptConfiguration(makeConfigurationBundle(), transferPassphrase);
       await publishConfigurationToMQTT(gate, topic, payload, mqttTransferRetain);
       setTransferMessage(mqttTransferRetain ? "Encrypted configuration published and retained." : "Encrypted configuration published without retention; any older retained copy was cleared.");
-    } catch (error) { setTransferMessage(error instanceof Error ? error.message : "MQTT configuration publish failed."); }
+    } catch (error) { setTransferMessage(`MQTT publish failed: ${error instanceof Error ? error.message : "Unknown error."}`); }
     finally { setTransferBusy(false); }
   };
 
@@ -603,7 +609,7 @@ export function GateControlApp() {
       const gate = transferGate(); if (!gate) throw new Error("Select a configured gate broker for the transfer.");
       const bundle = await decryptConfiguration(await loadConfigurationFromMQTT(gate, checkedTransferTopic()), transferPassphrase);
       if (applyConfigurationBundle(bundle)) setTransferMessage("Retained MQTT configuration loaded. Notification permission remains specific to this device.");
-    } catch (error) { setTransferMessage(error instanceof Error ? error.message : "MQTT configuration load failed."); }
+    } catch (error) { setTransferMessage(`MQTT load failed: ${error instanceof Error ? error.message : "Unknown error."}`); }
     finally { setTransferBusy(false); }
   };
 
@@ -781,17 +787,18 @@ export function GateControlApp() {
             <div className="transfer-controls">
               <label className="transfer-scope"><span>Transfer contents</span><select value={transferScope} onChange={(event) => { setTransferScope(event.target.value as "app" | "gate"); setTransferMessage(""); }}><option value="app">All gates and app settings</option><option value="gate">One gate only</option></select></label>
               {transferScope === "gate" && <label className="transfer-gate"><span>Gate to transfer</span><select value={mqttTransferGateId} disabled={!gates.length || transferBusy} onChange={(event) => setMQTTTransferGateId(event.target.value)}>{gates.length ? gates.map((gate) => <option key={gate.id} value={gate.id}>{gate.name}</option>) : <option value="">No gates configured</option>}</select></label>}
-              <label className="transfer-passphrase"><span>Transfer passphrase</span><input type="password" autoComplete="new-password" minLength={8} placeholder="At least 8 characters" value={transferPassphrase} onChange={(event) => { setTransferPassphrase(event.target.value); setPreparedSharePayload(""); }} /><small>Required to encrypt and decrypt every transfer. It is never stored.</small></label>
+              <label className="transfer-passphrase"><span>Encryption passphrase <small>not the MQTT broker password</small></span><span className="transfer-passphrase-input"><input type={showTransferPassphrase ? "text" : "password"} autoComplete="new-password" minLength={8} placeholder="At least 8 characters" value={transferPassphrase} onChange={(event) => { setTransferPassphrase(event.target.value); setPreparedSharePayload(""); }} /><button type="button" className="secondary-button" onClick={() => setShowTransferPassphrase((current) => !current)}>{showTransferPassphrase ? "Hide" : "Show"}</button></span><small>Use the exact same passphrase when loading or importing on the iPhone. It is never stored or published.</small></label>
               {transferMessage && <p className={`transfer-message transfer-message--near ${/failed|cannot|could not|requires|enter|select|timed out|rejected|unavailable/i.test(transferMessage) ? "transfer-message--error" : ""}`} role="status">{transferMessage}</p>}
               <div className="transfer-file-actions">
                 <button type="button" className="secondary-button" disabled={transferBusy} onClick={() => void exportConfiguration(false)}><Download /> Export file</button>
                 <button type="button" className={preparedSharePayload ? "primary-button" : "secondary-button"} disabled={transferBusy} onClick={() => void exportConfiguration(true)}><Share2 /> {preparedSharePayload ? "Open Share / AirDrop" : "Prepare Share / AirDrop"}</button>
-                {transferScope === "gate" && <button type="button" className="secondary-button" disabled={transferBusy || !gates.length} onClick={() => void shareGateByQRCode()}><QrCode /> Share gate QR</button>}
+                <button type="button" className="secondary-button" disabled={transferBusy || !gates.length} onClick={() => void shareGateByQRCode()}><QrCode /> Share QR</button>
                 <button type="button" className="secondary-button" disabled={transferBusy} onClick={() => transferFileInput.current?.click()}><Upload /> Import file</button>
                 <input ref={transferFileInput} className="transfer-file-input" type="file" accept=".gateconfig,application/json" onChange={(event) => void importConfigurationFile(event.target.files?.[0])} />
               </div>
-              {pendingGateTransferToken && <button type="button" className="primary-button transfer-import-qr" disabled={transferBusy} onClick={() => void importPendingGateTransfer()}><QrCode /> Import shared gate</button>}
+              {pendingGateTransferToken && <button type="button" className="primary-button transfer-import-qr" disabled={transferBusy} onClick={() => void importPendingGateTransfer()}><QrCode /> Import shared configuration</button>}
               <div className="transfer-divider"><span>MQTT configuration topic</span></div>
+              <p className="transfer-mqtt-help">Publishing encrypts settings with the passphrase above. Loading requires the same passphrase. Keep retention enabled so another device can retrieve the published settings later.</p>
               <label><span>Broker connection</span><select value={mqttTransferGateId} disabled={!gates.length || transferBusy} onChange={(event) => setMQTTTransferGateId(event.target.value)}>{gates.length ? gates.map((gate) => <option key={gate.id} value={gate.id}>{gate.name} — {brokerUrl(gate.broker)}</option>) : <option value="">Configure a gate first</option>}</select></label>
               <label><span>Configuration topic</span><input value={mqttTransferTopic} placeholder="TurnageAutomation/GateControl/settings" onChange={(event) => setMQTTTransferTopic(event.target.value)} /></label>
               <button type="button" role="switch" aria-checked={mqttTransferRetain} className={`controller-switch transfer-retain ${mqttTransferRetain ? "controller-switch--on" : ""}`} onClick={() => setMQTTTransferRetain((current) => !current)}><span><strong>Retain MQTT configuration</strong><small>{mqttTransferRetain ? "New devices can load the latest copy" : "Publish once and clear any older retained copy"}</small></span><i /></button>
@@ -804,7 +811,7 @@ export function GateControlApp() {
           </section>
           <section className="security-card app-version-card"><span><GateBrandIcon /></span><div><h2>Gate Control</h2><p>Built for Turnage Automation gate integration systems. Configuration stays on this device unless notifications or configuration transfer are used; every exported or published transfer is encrypted.</p><small>Version {APP_VERSION}</small>{updateMessage && <small role="status">{updateMessage}</small>}</div><button type="button" className="secondary-button" onClick={() => void checkForAppUpdate()}><RefreshCw /> Check for updates</button></section>
         </main>
-        {qrShare && <div className="qr-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setQRShare(null); }}><section className="qr-dialog" role="dialog" aria-modal="true" aria-labelledby="gate-qr-title"><header><div><p className="eyebrow">Encrypted gate transfer</p><h2 id="gate-qr-title">Share {qrShare.gateName}</h2></div><button type="button" className="icon-button" aria-label="Close QR code" onClick={() => setQRShare(null)}><X /></button></header><img src={qrShare.dataUrl} alt={`QR code for sharing ${qrShare.gateName}`} /><p>On the other device, scan this code with its camera. Open Gate Control, enter the same passphrase, then import the shared gate.</p><strong>Expires {new Date(qrShare.expiresAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</strong><a className="secondary-button" href={qrShare.url} target="_blank" rel="noreferrer"><QrCode /> Open link on this device</a></section></div>}
+        {qrShare && <div className="qr-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setQRShare(null); }}><section className="qr-dialog" role="dialog" aria-modal="true" aria-labelledby="gate-qr-title"><header><div><p className="eyebrow">Encrypted configuration transfer</p><h2 id="gate-qr-title">Share {qrShare.transferName}</h2></div><button type="button" className="icon-button" aria-label="Close QR code" onClick={() => setQRShare(null)}><X /></button></header><img src={qrShare.dataUrl} alt={`QR code for sharing ${qrShare.transferName}`} /><p>On the iPhone, scan this code with the Camera app. Open Gate Control, enter the same passphrase, then select Import shared configuration.</p><strong>Expires {new Date(qrShare.expiresAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</strong><a className="secondary-button" href={qrShare.url} target="_blank" rel="noreferrer"><QrCode /> Open link on this device</a></section></div>}
         <AppNav screen={screen} onDashboard={() => setScreen({ name: "dashboard" })} onSetup={() => setScreen({ name: "setup" })} onAppSettings={() => setScreen({ name: "appSettings" })} />
       </div>
     );
