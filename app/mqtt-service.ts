@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import mqtt, { type IClientOptions, type MqttClient } from "mqtt";
 import type { AdditionalMQTTTopic, GateCommand, GateConfiguration, GateRuntimeState } from "./types";
-import { brokerUrl, createId, mapControllerMovePayload, mapGateState, readBinaryPayload, readControllerMoveValue } from "./types";
+import { brokerUrl, createId, mapControllerMovePayload, mapGateState, migrateBrokerSettings, readBinaryPayload, readControllerMoveValue } from "./types";
 
 type RuntimeMap = Record<string, GateRuntimeState>;
 
@@ -19,28 +19,30 @@ function installationId(): string {
 }
 
 function poolKey(gate: GateConfiguration): string {
+  const broker = migrateBrokerSettings(gate.broker);
   return [
-    brokerUrl(gate.broker).toLowerCase(),
-    gate.broker.username,
-    gate.broker.password,
-    gate.broker.clientId,
-    gate.broker.protocolVersion,
-    gate.broker.keepalive,
+    brokerUrl(broker).toLowerCase(),
+    broker.username,
+    broker.password,
+    broker.clientId,
+    broker.protocolVersion,
+    broker.keepalive,
   ].join("|");
 }
 
 function connectionOptions(gate: GateConfiguration, suffix: string): IClientOptions {
+  const broker = migrateBrokerSettings(gate.broker);
   return {
-    username: gate.broker.username || undefined,
-    password: gate.broker.password || undefined,
-    clientId: gate.broker.clientId || `gate-control-${installationId()}-${suffix}`,
-    protocolVersion: gate.broker.protocolVersion,
-    keepalive: Math.max(15, gate.broker.keepalive || 30),
+    username: broker.username || undefined,
+    password: broker.password || undefined,
+    clientId: broker.clientId || `gate-control-${installationId()}-${suffix}`,
+    protocolVersion: broker.protocolVersion,
+    keepalive: Math.max(15, broker.keepalive || 30),
     reconnectPeriod: 3_000,
     connectTimeout: 10_000,
     clean: true,
     resubscribe: true,
-    rejectUnauthorized: gate.broker.validateCertificate,
+    rejectUnauthorized: broker.validateCertificate,
   };
 }
 
@@ -61,9 +63,11 @@ export function useMQTTManager(gates: GateConfiguration[]) {
   const updateBrokerSignal = useCallback((id: string, channel: "ethernet" | "wifi", online: boolean, at: number) => {
     const signals = { ...(brokerSignals.current.get(id) ?? {}), [channel]: online };
     brokerSignals.current.set(id, signals);
-    const connected = signals.ethernet === true || signals.wifi === true;
+    const controllerOnline = signals.ethernet === true || signals.wifi === true;
+    const controllerOffline = signals.ethernet === false && signals.wifi === false;
     setRuntime((current) => {
       const previous = current[id] ?? offlineRuntime();
+      const connected = controllerOnline ? true : controllerOffline ? false : previous.connected;
       return {
         ...current,
         [id]: {
@@ -71,7 +75,7 @@ export function useMQTTManager(gates: GateConfiguration[]) {
           connected,
           state: connected ? (previous.state === "offline" ? "unknown" : previous.state) : "offline",
           lastMessageAt: at,
-          error: connected ? undefined : "Controller reports Ethernet and Wi-Fi offline",
+          error: controllerOffline ? "Controller reports Ethernet and Wi-Fi offline" : connected ? undefined : previous.error,
         },
       };
     });
@@ -97,12 +101,13 @@ export function useMQTTManager(gates: GateConfiguration[]) {
     for (const [key, groupedGates] of pools) {
       if (clients.current.has(key)) continue;
       const representative = groupedGates[0];
-      if (representative.broker.protocol === "mqtt") {
+      const broker = migrateBrokerSettings(representative.broker);
+      if (broker.protocol === "mqtt") {
         for (const gate of groupedGates) updateGate(gate.id, { connected: false, state: "offline", error: "Raw MQTT is unavailable in web browsers; use WS or WSS" });
         continue;
       }
       const client = mqtt.connect(
-        brokerUrl(representative.broker),
+        brokerUrl(broker),
         connectionOptions(representative, String(clients.current.size + 1)),
       );
       clients.current.set(key, client);
@@ -135,8 +140,9 @@ export function useMQTTManager(gates: GateConfiguration[]) {
         for (const gate of groupedGates) updateGate(gate.id, { connected: false, state: "offline" });
       });
 
-      client.on("error", () => {
-        for (const gate of groupedGates) updateGate(gate.id, { connected: false, state: "offline", error: "Broker connection failed" });
+      client.on("error", (error) => {
+        const detail = error instanceof Error && error.message ? error.message.replace(/\s+/g, " ").slice(0, 160) : "Unknown connection error";
+        for (const gate of groupedGates) updateGate(gate.id, { connected: false, state: "offline", error: `Broker connection failed: ${detail}` });
       });
 
       client.on("message", (topic, buffer) => {
@@ -295,9 +301,10 @@ export function useMQTTManager(gates: GateConfiguration[]) {
 }
 
 export function testGateConnection(gate: GateConfiguration): Promise<string> {
-  if (gate.broker.protocol === "mqtt") return Promise.reject(new Error("Raw mqtt:// connections are unavailable in web browsers. Select ws:// or wss://."));
+  const broker = migrateBrokerSettings(gate.broker);
+  if (broker.protocol === "mqtt") return Promise.reject(new Error("Raw mqtt:// connections are unavailable in web browsers. Select ws:// or wss://."));
   return new Promise((resolve, reject) => {
-    const client = mqtt.connect(brokerUrl(gate.broker), {
+    const client = mqtt.connect(brokerUrl(broker), {
       ...connectionOptions(gate, "test"),
       reconnectPeriod: 0,
       connectTimeout: 8_000,

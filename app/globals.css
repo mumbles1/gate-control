@@ -105,6 +105,7 @@ h2 { letter-spacing: -.035em; }
 .connection-badge svg { width: 12px; height: 12px; }
 .connection-badge--online { background: #eef7d1; color: #60770a; }
 .connection-badge--offline { background: #f1f2f1; color: #707a7f; }
+.connection-error { width: fit-content; max-width: 100%; display: flex; align-items: center; gap: 7px; margin-top: 9px; padding: 8px 10px; border: 1px solid rgba(184,74,61,.34); border-radius: 9px; background: rgba(184,74,61,.08); color: #b84a3d; font-size: .68rem; font-weight: 750; line-height: 1.4; }.connection-error svg { width: 15px; flex: 0 0 auto; }
 
 /* CSS-only gate artwork */
 .gate-art-button { appearance: none; border: 0; padding: 0; background: transparent; cursor: pointer; width: 100%; display: grid; place-items: center; border-radius: 18px; }

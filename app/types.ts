@@ -106,14 +106,25 @@ export function defaultBrokerPort(protocol: BrokerProtocol, tls: boolean): numbe
 export function brokerUrl(broker: BrokerSettings): string {
   const host = broker.host.trim().replace(/^\[|\]$/g, "");
   const formattedHost = host.includes(":") ? `[${host}]` : host;
-  const scheme = broker.protocol === "mqtt" ? (broker.tls ? "mqtts" : "mqtt") : (broker.protocol === "wss" || broker.tls ? "wss" : "ws");
+  // TLS is the source of truth for the transport scheme. Older imports could
+  // contain protocol: "wss" with tls: false, which made the editor show TLS
+  // off while the client still attempted WSS until the switch was toggled.
+  const scheme = broker.protocol === "mqtt" ? (broker.tls ? "mqtts" : "mqtt") : (broker.tls ? "wss" : "ws");
   const path = broker.protocol === "mqtt" ? "" : broker.basePath.trim() ? `/${broker.basePath.trim().replace(/^\/+|\/+$/g, "")}` : "";
   const port = Number.isInteger(broker.port) ? `:${broker.port}` : "";
   return `${scheme}://${formattedHost}${port}${path}`;
 }
 
 export function migrateBrokerSettings(broker: BrokerSettings): BrokerSettings {
-  if (broker.protocol && broker.host && broker.port) return { ...broker, url: brokerUrl(broker) };
+  if (broker.protocol && broker.host && broker.port) {
+    const protocol: BrokerProtocol = broker.protocol === "mqtt" ? "mqtt" : broker.tls ? "wss" : "ws";
+    const normalized = {
+      ...broker,
+      protocol,
+      validateCertificate: broker.validateCertificate ?? true,
+    };
+    return { ...normalized, url: brokerUrl(normalized) };
+  }
   try {
     const parsed = new URL(broker.url.trim());
     const rawScheme = parsed.protocol.replace(":", "").toLowerCase();

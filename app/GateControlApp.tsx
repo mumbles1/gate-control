@@ -59,7 +59,7 @@ function gateTopics(gate: GateConfiguration): string[] {
 }
 
 function ConnectionBadge({ runtime }: { runtime: GateRuntimeState }) {
-  return <span className={`connection-badge ${runtime.connected ? "connection-badge--online" : "connection-badge--offline"}`}>{runtime.connected ? <Wifi /> : <WifiOff />}{runtime.connected ? "Connected" : "Offline"}</span>;
+  return <span title={runtime.error} className={`connection-badge ${runtime.connected ? "connection-badge--online" : "connection-badge--offline"}`}>{runtime.connected ? <Wifi /> : <WifiOff />}{runtime.connected ? "Connected" : "Offline"}</span>;
 }
 
 function ServerStatusBanner({ reachable }: { reachable: boolean | undefined }) {
@@ -677,9 +677,10 @@ export function GateControlApp() {
   }, [properties, defaultProperty, activeProperty, loaded]);
 
   const saveGate = (gate: GateConfiguration) => {
+    const normalizedGate = migrateGate(gate);
     setGates((current) => {
-      const exists = current.some((item) => item.id === gate.id);
-      return (exists ? current.map((item) => item.id === gate.id ? gate : item) : [...current, { ...gate, order: current.length }]).sort((a, b) => a.order - b.order);
+      const exists = current.some((item) => item.id === normalizedGate.id);
+      return (exists ? current.map((item) => item.id === normalizedGate.id ? normalizedGate : item) : [...current, { ...normalizedGate, order: current.length }]).sort((a, b) => a.order - b.order);
     });
     setScreen({ name: "setup" });
   };
@@ -736,6 +737,7 @@ export function GateControlApp() {
           <section className={`detail-hero state-surface--${live.state}`}>
             <div className="detail-status-line"><span className={`state-dot state-dot--${live.state}`} /><strong>{stateLabels[live.state]}</strong><ConnectionBadge runtime={live} /></div>
             {live.warning && <div className="gate-warning gate-warning--detail" role="status"><AlertTriangle />{live.warning}</div>}
+            {live.error && <div className="connection-error" role="status"><WifiOff />{live.error}</div>}
             <GateArtwork style={gate.visualStyle} state={live.state} large onActivate={() => activateGraphic(gate)} />
             <div className="detail-meta"><span>{formatAge(live.lastMessageAt)}</span><span>{brokerUrl(gate.broker)}</span></div>
           </section>
