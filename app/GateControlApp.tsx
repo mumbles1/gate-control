@@ -2,12 +2,13 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  AlertTriangle, ArrowDown, ArrowLeft, ArrowUp, Bell, CalendarDays, ChevronRight, CircleDot, Clock3, CloudDownload, CloudUpload, Copy, Download, QrCode, RefreshCw, Send, Share2, Square,
+  AlertTriangle, ArrowDown, ArrowLeft, ArrowUp, Bell, CalendarDays, Camera, ChevronRight, CircleDot, Clock3, CloudDownload, CloudUpload, Copy, Download, QrCode, RefreshCw, Send, Share2, Square,
   Gauge, LayoutGrid, List, Menu, Monitor, Moon, Plus, Radio, Settings, SlidersHorizontal, Upload,
   Sun, Trash2, Wifi, WifiOff, X,
 } from "lucide-react";
 import { GateArtwork } from "./GateArtwork";
 import { GateEditor } from "./GateEditor";
+import { ConfigurationQRScanner } from "./ConfigurationQRScanner";
 import { useMQTTManager } from "./mqtt-service";
 import { gateStorage } from "./storage";
 import { createGateTransfer, decryptConfiguration, downloadConfiguration, encryptConfiguration, gateTransferQRCode, loadConfigurationFromMQTT, loadGateTransfer, publishConfigurationToMQTT, shareConfiguration } from "./configuration-transfer";
@@ -24,7 +25,7 @@ type Screen =
   | { name: "detail"; gateId: string }
   | { name: "editor"; gate: GateConfiguration; cloneDraft?: boolean; advanced?: boolean };
 
-const APP_VERSION = "1.1.2";
+const APP_VERSION = "1.1.4";
 
 const stateLabels: Record<GateState, string> = {
   open: "Open",
@@ -295,6 +296,7 @@ export function GateControlApp() {
   const [preparedSharePayload, setPreparedSharePayload] = useState("");
   const [pendingGateTransferToken, setPendingGateTransferToken] = useState("");
   const [qrShare, setQRShare] = useState<{ dataUrl: string; url: string; transferName: string; expiresAt: number } | null>(null);
+  const [qrScannerOpen, setQRScannerOpen] = useState(false);
   const [serverReachable, setServerReachable] = useState<boolean | undefined>(undefined);
   const [updateMessage, setUpdateMessage] = useState("");
   const transferFileInput = useRef<HTMLInputElement>(null);
@@ -357,8 +359,7 @@ export function GateControlApp() {
     const token = new URLSearchParams(window.location.search).get("gateTransfer");
     if (!token) return;
     setPendingGateTransferToken(token);
-    setTransferScope("gate");
-    setTransferMessage("A shared gate is ready. Enter its transfer passphrase, then select Import shared gate.");
+    setTransferMessage("A shared configuration is ready. Enter its transfer passphrase, then select Import shared configuration.");
     setScreen({ name: "appSettings" });
   }, [loaded]);
 
@@ -577,6 +578,20 @@ export function GateControlApp() {
     finally { setTransferBusy(false); }
   };
 
+  const acceptScannedConfiguration = (value: string) => {
+    try {
+      const scanned = new URL(value, window.location.origin);
+      const token = scanned.searchParams.get("gateTransfer")?.trim();
+      if (!token) throw new Error("This is not a Gate Control configuration QR code.");
+      setPendingGateTransferToken(token);
+      setQRScannerOpen(false);
+      setTransferMessage("QR code scanned. Enter the transfer passphrase, then select Import shared configuration.");
+    } catch (error) {
+      setQRScannerOpen(false);
+      setTransferMessage(error instanceof Error ? error.message : "That QR code could not be read.");
+    }
+  };
+
   const importConfigurationFile = async (file: File | undefined) => {
     if (!file) return;
     setTransferBusy(true); setTransferMessage("Decrypting configuration file…");
@@ -793,6 +808,7 @@ export function GateControlApp() {
                 <button type="button" className="secondary-button" disabled={transferBusy} onClick={() => void exportConfiguration(false)}><Download /> Export file</button>
                 <button type="button" className={preparedSharePayload ? "primary-button" : "secondary-button"} disabled={transferBusy} onClick={() => void exportConfiguration(true)}><Share2 /> {preparedSharePayload ? "Open Share / AirDrop" : "Prepare Share / AirDrop"}</button>
                 <button type="button" className="secondary-button" disabled={transferBusy || !gates.length} onClick={() => void shareGateByQRCode()}><QrCode /> Share QR</button>
+                <button type="button" className="secondary-button" disabled={transferBusy} onClick={() => { setTransferMessage(""); setQRScannerOpen(true); }}><Camera /> Scan QR</button>
                 <button type="button" className="secondary-button" disabled={transferBusy} onClick={() => transferFileInput.current?.click()}><Upload /> Import file</button>
                 <input ref={transferFileInput} className="transfer-file-input" type="file" accept=".gateconfig,application/json" onChange={(event) => void importConfigurationFile(event.target.files?.[0])} />
               </div>
@@ -811,7 +827,8 @@ export function GateControlApp() {
           </section>
           <section className="security-card app-version-card"><span><GateBrandIcon /></span><div><h2>Gate Control</h2><p>Built for Turnage Automation gate integration systems. Configuration stays on this device unless notifications or configuration transfer are used; every exported or published transfer is encrypted.</p><small>Version {APP_VERSION}</small>{updateMessage && <small role="status">{updateMessage}</small>}</div><button type="button" className="secondary-button" onClick={() => void checkForAppUpdate()}><RefreshCw /> Check for updates</button></section>
         </main>
-        {qrShare && <div className="qr-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setQRShare(null); }}><section className="qr-dialog" role="dialog" aria-modal="true" aria-labelledby="gate-qr-title"><header><div><p className="eyebrow">Encrypted configuration transfer</p><h2 id="gate-qr-title">Share {qrShare.transferName}</h2></div><button type="button" className="icon-button" aria-label="Close QR code" onClick={() => setQRShare(null)}><X /></button></header><img src={qrShare.dataUrl} alt={`QR code for sharing ${qrShare.transferName}`} /><p>On the iPhone, scan this code with the Camera app. Open Gate Control, enter the same passphrase, then select Import shared configuration.</p><strong>Expires {new Date(qrShare.expiresAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</strong><a className="secondary-button" href={qrShare.url} target="_blank" rel="noreferrer"><QrCode /> Open link on this device</a></section></div>}
+        {qrShare && <div className="qr-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setQRShare(null); }}><section className="qr-dialog" role="dialog" aria-modal="true" aria-labelledby="gate-qr-title"><header><div><p className="eyebrow">Encrypted configuration transfer</p><h2 id="gate-qr-title">Share {qrShare.transferName}</h2></div><button type="button" className="icon-button" aria-label="Close QR code" onClick={() => setQRShare(null)}><X /></button></header><img src={qrShare.dataUrl} alt={`QR code for sharing ${qrShare.transferName}`} /><p>In the installed Gate Control app on the iPhone, open App settings, select Scan QR, enter the same passphrase, then import the shared configuration.</p><strong>Expires {new Date(qrShare.expiresAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</strong><a className="secondary-button" href={qrShare.url} target="_blank" rel="noreferrer"><QrCode /> Open link on this device</a></section></div>}
+        {qrScannerOpen && <ConfigurationQRScanner onClose={() => setQRScannerOpen(false)} onScan={acceptScannedConfiguration} />}
         <AppNav screen={screen} onDashboard={() => setScreen({ name: "dashboard" })} onSetup={() => setScreen({ name: "setup" })} onAppSettings={() => setScreen({ name: "appSettings" })} />
       </div>
     );

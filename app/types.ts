@@ -355,7 +355,7 @@ export const defaultGate = (order = 0): GateConfiguration => {
     open: { topic: topics.openTopic, payload: "Open" },
     close: { topic: topics.closeTopic, payload: "Close" },
   },
-  advancedTopics: [],
+  advancedTopics: controllerTopicDefaults(property, location),
   mapping: {
     format: "plain",
     jsonPath: "state",
