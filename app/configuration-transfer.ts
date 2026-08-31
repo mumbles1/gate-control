@@ -2,6 +2,9 @@
 
 import mqtt, { type IClientOptions, type MqttClient } from "mqtt";
 import QRCode from "qrcode";
+import { gcm } from "@noble/ciphers/aes.js";
+import { pbkdf2Async } from "@noble/hashes/pbkdf2.js";
+import { sha256 } from "@noble/hashes/sha2.js";
 import type { ColorTheme, DashboardLayout, GateConfiguration, GateDisplayMode } from "./types";
 import { brokerUrl, createId } from "./types";
 
@@ -70,13 +73,19 @@ async function transferKey(passphrase: string, salt: Uint8Array, iterations: num
   );
 }
 
+async function portableTransferKey(passphrase: string, salt: Uint8Array, iterations: number) {
+  return pbkdf2Async(sha256, textEncoder.encode(passphrase), salt, { c: iterations, dkLen: 32, asyncTick: 8 });
+}
+
 export async function encryptConfiguration(bundle: ConfigurationBundle, passphrase: string): Promise<string> {
   if (passphrase.length < 8) throw new Error("Transfer passphrase must contain at least 8 characters.");
-  if (!globalThis.crypto?.subtle) throw new Error("Encrypted transfer requires HTTPS or localhost.");
+  if (!globalThis.crypto?.getRandomValues) throw new Error("This browser cannot securely create encrypted transfers.");
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const iv = crypto.getRandomValues(new Uint8Array(12));
-  const key = await transferKey(passphrase, salt, ITERATIONS, ["encrypt"]);
-  const ciphertext = await crypto.subtle.encrypt({ name: "AES-GCM", iv: asArrayBuffer(iv) }, key, asArrayBuffer(textEncoder.encode(JSON.stringify(bundle))));
+  const cleartext = textEncoder.encode(JSON.stringify(bundle));
+  const ciphertext = globalThis.crypto.subtle
+    ? new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv: asArrayBuffer(iv) }, await transferKey(passphrase, salt, ITERATIONS, ["encrypt"]), asArrayBuffer(cleartext)))
+    : gcm(await portableTransferKey(passphrase, salt, ITERATIONS), iv).encrypt(cleartext);
   const envelope: EncryptedEnvelope = {
     format: "gate-control-encrypted-configuration",
     version: 1,
@@ -84,22 +93,23 @@ export async function encryptConfiguration(bundle: ConfigurationBundle, passphra
     iterations: ITERATIONS,
     salt: bytesToBase64(salt),
     iv: bytesToBase64(iv),
-    ciphertext: bytesToBase64(new Uint8Array(ciphertext)),
+    ciphertext: bytesToBase64(ciphertext),
   };
   return JSON.stringify(envelope);
 }
 
 export async function decryptConfiguration(value: string, passphrase: string): Promise<ConfigurationBundle> {
   if (passphrase.length < 8) throw new Error("Enter the transfer passphrase used when the configuration was published or exported.");
-  if (!globalThis.crypto?.subtle) throw new Error("Encrypted transfer requires HTTPS or localhost.");
   try {
     const envelope = JSON.parse(value) as EncryptedEnvelope;
     if (envelope.format !== "gate-control-encrypted-configuration" || envelope.version !== 1 || envelope.kdf !== "PBKDF2-SHA256") throw new Error("Unsupported configuration format.");
     if (!Number.isInteger(envelope.iterations) || envelope.iterations < 100_000 || envelope.iterations > 1_000_000) throw new Error("Invalid encryption settings.");
     const salt = base64ToBytes(envelope.salt);
     const iv = base64ToBytes(envelope.iv);
-    const key = await transferKey(passphrase, salt, envelope.iterations, ["decrypt"]);
-    const clear = await crypto.subtle.decrypt({ name: "AES-GCM", iv: asArrayBuffer(iv) }, key, asArrayBuffer(base64ToBytes(envelope.ciphertext)));
+    const encrypted = base64ToBytes(envelope.ciphertext);
+    const clear = globalThis.crypto?.subtle
+      ? new Uint8Array(await crypto.subtle.decrypt({ name: "AES-GCM", iv: asArrayBuffer(iv) }, await transferKey(passphrase, salt, envelope.iterations, ["decrypt"]), asArrayBuffer(encrypted)))
+      : gcm(await portableTransferKey(passphrase, salt, envelope.iterations), iv).decrypt(encrypted);
     const bundle = JSON.parse(textDecoder.decode(clear)) as ConfigurationBundle;
     if (bundle.format !== "gate-control-configuration" || bundle.version !== 1 || !Array.isArray(bundle.gates) || bundle.gates.length > 100 || !bundle.settings) throw new Error("Invalid Gate Control configuration.");
     return bundle;
@@ -115,8 +125,10 @@ export function downloadConfiguration(payload: string) {
   const link = document.createElement("a");
   link.href = url;
   link.download = `gate-control-${new Date().toISOString().slice(0, 10)}.gateconfig`;
+  link.style.display = "none";
+  document.body.appendChild(link);
   link.click();
-  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  window.setTimeout(() => { link.remove(); URL.revokeObjectURL(url); }, 1000);
 }
 
 export async function shareConfiguration(payload: string): Promise<"shared" | "downloaded"> {

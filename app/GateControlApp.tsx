@@ -24,7 +24,7 @@ type Screen =
   | { name: "detail"; gateId: string }
   | { name: "editor"; gate: GateConfiguration; cloneDraft?: boolean; advanced?: boolean };
 
-const APP_VERSION = "1.1.0";
+const APP_VERSION = "1.1.1";
 
 const stateLabels: Record<GateState, string> = {
   open: "Open",
@@ -291,6 +291,7 @@ export function GateControlApp() {
   const [transferScope, setTransferScope] = useState<"app" | "gate">("app");
   const [transferBusy, setTransferBusy] = useState(false);
   const [transferMessage, setTransferMessage] = useState("");
+  const [preparedSharePayload, setPreparedSharePayload] = useState("");
   const [pendingGateTransferToken, setPendingGateTransferToken] = useState("");
   const [qrShare, setQRShare] = useState<{ dataUrl: string; url: string; gateName: string; expiresAt: number } | null>(null);
   const [serverReachable, setServerReachable] = useState<boolean | undefined>(undefined);
@@ -377,6 +378,7 @@ export function GateControlApp() {
   useEffect(() => { if (loaded) void gateStorage.saveMQTTTransferTopic(mqttTransferTopic); }, [mqttTransferTopic, loaded]);
   useEffect(() => { if (loaded) void gateStorage.saveMQTTTransferRetain(mqttTransferRetain); }, [mqttTransferRetain, loaded]);
   useEffect(() => { if (loaded) void gateStorage.saveMQTTTransferGateId(mqttTransferGateId); }, [mqttTransferGateId, loaded]);
+  useEffect(() => { setPreparedSharePayload(""); }, [gates, layout, theme, displayMode, defaultProperty, notificationContactEmail, controllerOfflineDelay, mqttTransferTopic, mqttTransferRetain, mqttTransferGateId, transferScope]);
   useEffect(() => {
     if (!loaded) return;
     void scheduleAlertState(scheduleAlertsEnabled).then(setAlertState);
@@ -516,15 +518,21 @@ export function GateControlApp() {
   };
 
   const exportConfiguration = async (share: boolean) => {
-    setTransferBusy(true); setTransferMessage("");
+    setTransferBusy(true); setTransferMessage(share ? (preparedSharePayload ? "Opening the device Share Sheet…" : "Preparing encrypted file for sharing…") : "Preparing encrypted export…");
     try {
       ensureTransferPassphrase();
+      if (share && preparedSharePayload) {
+        const result = await shareConfiguration(preparedSharePayload);
+        setPreparedSharePayload("");
+        setTransferMessage(result === "shared" ? "Encrypted configuration opened in the device Share Sheet." : "File sharing is unavailable, so the encrypted configuration was downloaded.");
+        return;
+      }
       const bundle = makeConfigurationBundle();
       if (!bundle.gates.length) throw new Error(transferScope === "gate" ? "Select a gate to transfer." : "There are no gates to export.");
       const payload = await encryptConfiguration(bundle, transferPassphrase);
       if (share) {
-        const result = await shareConfiguration(payload);
-        setTransferMessage(result === "shared" ? "Encrypted configuration opened in the device Share Sheet." : "File sharing is unavailable, so the encrypted configuration was downloaded.");
+        setPreparedSharePayload(payload);
+        setTransferMessage("Encrypted file prepared. Tap Open Share / AirDrop to open the device Share Sheet.");
       } else {
         downloadConfiguration(payload);
         setTransferMessage("Encrypted configuration exported.");
@@ -534,7 +542,7 @@ export function GateControlApp() {
   };
 
   const shareGateByQRCode = async () => {
-    setTransferBusy(true); setTransferMessage("");
+    setTransferBusy(true); setTransferMessage("Creating encrypted gate QR code…");
     try {
       ensureTransferPassphrase();
       const gate = transferGate(); if (!gate) throw new Error("Select a gate to share.");
@@ -549,7 +557,7 @@ export function GateControlApp() {
 
   const importPendingGateTransfer = async () => {
     if (!pendingGateTransferToken) return;
-    setTransferBusy(true); setTransferMessage("");
+    setTransferBusy(true); setTransferMessage("Downloading and decrypting shared gate…");
     try {
       ensureTransferPassphrase();
       const bundle = await decryptConfiguration(await loadGateTransfer(pendingGateTransferToken), transferPassphrase);
@@ -565,7 +573,7 @@ export function GateControlApp() {
 
   const importConfigurationFile = async (file: File | undefined) => {
     if (!file) return;
-    setTransferBusy(true); setTransferMessage("");
+    setTransferBusy(true); setTransferMessage("Decrypting configuration file…");
     try {
       ensureTransferPassphrase();
       const bundle = await decryptConfiguration(await file.text(), transferPassphrase);
@@ -576,7 +584,7 @@ export function GateControlApp() {
 
   const transferGate = () => gates.find((gate) => gate.id === mqttTransferGateId);
   const publishMQTTConfiguration = async () => {
-    setTransferBusy(true); setTransferMessage("");
+    setTransferBusy(true); setTransferMessage("Encrypting settings and connecting to the MQTT broker…");
     try {
       ensureTransferPassphrase();
       const gate = transferGate(); if (!gate) throw new Error("Select a configured gate broker for the transfer.");
@@ -589,7 +597,7 @@ export function GateControlApp() {
   };
 
   const loadMQTTConfiguration = async () => {
-    setTransferBusy(true); setTransferMessage("");
+    setTransferBusy(true); setTransferMessage("Connecting to MQTT and waiting for retained settings…");
     try {
       ensureTransferPassphrase();
       const gate = transferGate(); if (!gate) throw new Error("Select a configured gate broker for the transfer.");
@@ -771,12 +779,13 @@ export function GateControlApp() {
           <section className="settings-section transfer-settings">
             <div className="section-copy"><span className="section-icon"><Share2 /></span><div><h2>Configuration transfer</h2><p>Clone app settings or one gate using an encrypted file, AirDrop, QR code, or MQTT.</p></div></div>
             <div className="transfer-controls">
-              <label className="transfer-scope"><span>Transfer contents</span><select value={transferScope} onChange={(event) => setTransferScope(event.target.value as "app" | "gate")}><option value="app">All gates and app settings</option><option value="gate">One gate only</option></select></label>
+              <label className="transfer-scope"><span>Transfer contents</span><select value={transferScope} onChange={(event) => { setTransferScope(event.target.value as "app" | "gate"); setTransferMessage(""); }}><option value="app">All gates and app settings</option><option value="gate">One gate only</option></select></label>
               {transferScope === "gate" && <label className="transfer-gate"><span>Gate to transfer</span><select value={mqttTransferGateId} disabled={!gates.length || transferBusy} onChange={(event) => setMQTTTransferGateId(event.target.value)}>{gates.length ? gates.map((gate) => <option key={gate.id} value={gate.id}>{gate.name}</option>) : <option value="">No gates configured</option>}</select></label>}
-              <label className="transfer-passphrase"><span>Transfer passphrase</span><input type="password" autoComplete="new-password" minLength={8} placeholder="At least 8 characters" value={transferPassphrase} onChange={(event) => setTransferPassphrase(event.target.value)} /><small>Required to encrypt and decrypt every transfer. It is never stored.</small></label>
+              <label className="transfer-passphrase"><span>Transfer passphrase</span><input type="password" autoComplete="new-password" minLength={8} placeholder="At least 8 characters" value={transferPassphrase} onChange={(event) => { setTransferPassphrase(event.target.value); setPreparedSharePayload(""); }} /><small>Required to encrypt and decrypt every transfer. It is never stored.</small></label>
+              {transferMessage && <p className={`transfer-message transfer-message--near ${/failed|cannot|could not|requires|enter|select|timed out|rejected|unavailable/i.test(transferMessage) ? "transfer-message--error" : ""}`} role="status">{transferMessage}</p>}
               <div className="transfer-file-actions">
                 <button type="button" className="secondary-button" disabled={transferBusy} onClick={() => void exportConfiguration(false)}><Download /> Export file</button>
-                <button type="button" className="secondary-button" disabled={transferBusy} onClick={() => void exportConfiguration(true)}><Share2 /> Share / AirDrop</button>
+                <button type="button" className={preparedSharePayload ? "primary-button" : "secondary-button"} disabled={transferBusy} onClick={() => void exportConfiguration(true)}><Share2 /> {preparedSharePayload ? "Open Share / AirDrop" : "Prepare Share / AirDrop"}</button>
                 {transferScope === "gate" && <button type="button" className="secondary-button" disabled={transferBusy || !gates.length} onClick={() => void shareGateByQRCode()}><QrCode /> Share gate QR</button>}
                 <button type="button" className="secondary-button" disabled={transferBusy} onClick={() => transferFileInput.current?.click()}><Upload /> Import file</button>
                 <input ref={transferFileInput} className="transfer-file-input" type="file" accept=".gateconfig,application/json" onChange={(event) => void importConfigurationFile(event.target.files?.[0])} />
@@ -790,7 +799,6 @@ export function GateControlApp() {
                 <button type="button" className="secondary-button" disabled={transferBusy || !gates.length} onClick={() => void publishMQTTConfiguration()}><CloudUpload /> Publish settings</button>
                 <button type="button" className="secondary-button" disabled={transferBusy || !gates.length} onClick={() => void loadMQTTConfiguration()}><CloudDownload /> Load settings</button>
               </div>
-              {transferMessage && <p className="transfer-message" role="status">{transferMessage}</p>}
               <p className="transfer-note">Transfers include MQTT credentials, so always use a strong passphrase and restrict this topic with Mosquitto ACLs. Full-app imports replace this device's gates; one-gate imports add or update only that gate. Push permission and notification device identity are never cloned. QR transfers expire after 10 minutes.</p>
             </div>
           </section>
