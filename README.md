@@ -64,7 +64,7 @@ ghcr.io/mumbles1/gate-control:v1.0.0
 
 In CasaOS, select **App Store → Install a customized app → Import Compose**, then import `docker-compose.casaos.yml`. Use `latest` to follow the current stable release, or replace `latest` with a specific version such as `v1.0.0` to pin the installation.
 
-The CasaOS app exposes local port 3080. Gate configuration is stored in each browser, so the app container requires no data volume or database.
+The CasaOS app exposes local port 3080. Gate configuration stays in each browser. If Gate notifications are enabled, the container stores encrypted monitoring configuration and stable Web Push keys in `/DATA/AppData/gate-control`.
 
 ### Complete CasaOS Compose example
 
@@ -79,6 +79,7 @@ services:
     restart: unless-stopped
     environment:
       NEXT_PUBLIC_APP_URL: "http://YOUR_CASAOS_IP:3080"
+      ALERT_DATA_DIR: "/data"
     ports:
       - target: 3000
         published: "3080"
@@ -87,6 +88,8 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    volumes:
+      - /DATA/AppData/gate-control:/data
     x-casaos:
       envs:
         - container: NEXT_PUBLIC_APP_URL
@@ -111,7 +114,7 @@ x-casaos:
     en_us: Gate Control
 ```
 
-CasaOS WebUI values: scheme `http`, host port `3080`, container port `3000`, and path `/`. No volume mounts are required.
+CasaOS WebUI values: scheme `http`, host port `3080`, container port `3000`, and path `/`. Mount `/DATA/AppData/gate-control` on the host to `/data` in the container so notification subscriptions and encryption keys survive updates.
 
 Update a `latest` installation from the CasaOS interface, or from a terminal with:
 
@@ -159,7 +162,7 @@ Automatic open and close times use a 12-hour picker in the app and publish the c
 
 Return to **Gates** and confirm that the gate shows **Connected** and reports its current state. Test controls while physically observing the gate and its safety devices.
 
-Gate configuration and credentials remain in that browser's local device storage. Repeat the gate setup on every phone, tablet, or computer that will operate Gate Control. Adding the site to a mobile home screen does not synchronize configuration between devices.
+Gate configuration and credentials remain in that browser's local device storage. Use **App → Configuration transfer** to copy an encrypted configuration to another phone, tablet, or computer. Adding the site to a mobile home screen alone does not synchronize configuration between devices.
 
 ## PWA installation
 
@@ -168,6 +171,37 @@ Gate configuration and credentials remain in that browser's local device storage
 - Desktop: use the browser's install control.
 
 HTTPS is required for service workers and a reliable installed-app experience. Clearing browser site data also clears saved gates and credentials.
+
+## Gate notifications
+
+Open **App → Gate notifications** from the installed HTTPS app, optionally enter the Web Push service contact email, and enable the switch. No contact email is hard-coded into Gate Control. The field identifies the service to push providers and is not an email-alert destination. Use **Test alert** to confirm delivery. On iPhone, Gate Control must first be added to the Home Screen and opened from that icon before iOS offers notification permission.
+
+While enabled, the CasaOS companion monitor connects read-only to each configured MQTT endpoint and can alert for:
+
+- An enabled automatic open/close schedule that has not reached the expected final state after 90 seconds.
+- Both `<Property>/<Location>/Broker/Eth` and `<Property>/<Location>/Broker/WiFi` continuously reporting `{"LWT":0}` for the configurable controller-offline delay (15–3600 seconds, default 15).
+- The configured MQTT broker remaining unreachable for 60 seconds.
+
+Only one notification is sent per outage. The monitor does not publish gate commands, retry a scheduled action, or change the displayed gate state. Use a separate broker account restricted to the required status topics when possible. Alert configuration and MQTT credentials required by the monitor are encrypted in the `/data` volume.
+
+## Clone configuration to another device
+
+Open **App → Configuration transfer** and enter a transfer passphrase of at least eight characters. The passphrase is used for AES-GCM encryption and is never stored.
+
+- **Export file** downloads an encrypted `.gateconfig` file.
+- **Share / AirDrop** opens the native mobile Share Sheet when supported, allowing AirDrop on Apple devices; unsupported browsers download the file instead.
+- Select **One gate only** and **Share gate QR** to create a 10-minute encrypted handoff. Scan it on the receiving device, open Gate Control, enter the same passphrase, and import the shared gate.
+- **Import file** decrypts the file and replaces the gates and app preferences on that device.
+- **Publish settings** publishes the encrypted bundle to the selected gate broker and configurable MQTT topic with QoS 1. Retain can be enabled or disabled.
+- **Load settings** subscribes to that topic and imports the retained encrypted bundle.
+
+The transfer includes gate definitions, MQTT credentials, dashboard preferences, notification contact email, and offline delay. It never transfers the device's Web Push subscription, notification permission, or local notification identity. Restrict the configuration topic with Mosquitto ACLs and use a strong passphrase. When **Retain** is disabled, Gate Control first clears any older retained configuration before publishing the new bundle once.
+
+QR codes contain only a random short-lived transfer link. The encrypted gate payload is held in memory by the app server for 10 minutes and is never written to disk. The passphrase is not included in the QR code.
+
+## Offline launch behavior
+
+The installed app caches a branded server-unavailable screen. If the app server cannot be reached within five seconds during launch, Gate Control explains the problem and retries automatically every 10 seconds. If the server becomes unavailable while the app is already open, a warning banner appears with a manual retry button. A first-time device still needs a working server connection to install and cache the app.
 
 ## Security notes
 

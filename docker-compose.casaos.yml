@@ -6,6 +6,7 @@ services:
     restart: unless-stopped
     environment:
       NEXT_PUBLIC_APP_URL: "https://gates.example.com"
+      ALERT_DATA_DIR: "/data"
     ports:
       - target: 3000
         published: "3080"
@@ -14,11 +15,17 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    volumes:
+      - /DATA/AppData/gate-control:/data
     x-casaos:
       envs:
         - container: NEXT_PUBLIC_APP_URL
           description:
             en_us: Public HTTPS URL for Gate Control
+      volumes:
+        - container: /data
+          description:
+            en_us: Encrypted schedule alert configuration and stable notification keys
       ports:
         - container: "3000"
           description:

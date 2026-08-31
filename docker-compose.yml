@@ -7,9 +7,12 @@ services:
     restart: unless-stopped
     environment:
       NEXT_PUBLIC_APP_URL: "https://gates.example.com"
+      ALERT_DATA_DIR: "/data"
     ports:
       - "3080:3000"
     security_opt:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    volumes:
+      - ./data:/data

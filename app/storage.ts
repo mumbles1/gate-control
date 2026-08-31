@@ -1,5 +1,6 @@
 import type { ColorTheme, DashboardLayout, GateConfiguration, GateDisplayMode } from "./types";
 import { migrateGate } from "./types";
+import type { AlertIdentity } from "./notifications";
 
 const DB_NAME = "gate-control";
 const STORE_NAME = "settings";
@@ -53,4 +54,18 @@ export const gateStorage = {
   saveDisplayMode: (mode: GateDisplayMode) => writeValue("displayMode", mode),
   loadDefaultProperty: () => readValue<string>("defaultProperty", ""),
   saveDefaultProperty: (property: string) => writeValue("defaultProperty", property),
+  loadScheduleAlertsEnabled: () => readValue<boolean>("scheduleAlertsEnabled", false),
+  saveScheduleAlertsEnabled: (enabled: boolean) => writeValue("scheduleAlertsEnabled", enabled),
+  loadAlertIdentity: () => readValue<AlertIdentity | null>("alertIdentity", null),
+  saveAlertIdentity: (identity: AlertIdentity) => writeValue("alertIdentity", identity),
+  loadNotificationContactEmail: () => readValue<string>("notificationContactEmail", ""),
+  saveNotificationContactEmail: (email: string) => writeValue("notificationContactEmail", email),
+  loadControllerOfflineDelay: () => readValue<number>("controllerOfflineDelaySeconds", 15),
+  saveControllerOfflineDelay: (seconds: number) => writeValue("controllerOfflineDelaySeconds", seconds),
+  loadMQTTTransferTopic: () => readValue<string>("mqttTransferTopic", "TurnageAutomation/GateControl/settings"),
+  saveMQTTTransferTopic: (topic: string) => writeValue("mqttTransferTopic", topic),
+  loadMQTTTransferRetain: () => readValue<boolean>("mqttTransferRetain", true),
+  saveMQTTTransferRetain: (retain: boolean) => writeValue("mqttTransferRetain", retain),
+  loadMQTTTransferGateId: () => readValue<string>("mqttTransferGateId", ""),
+  saveMQTTTransferGateId: (gateId: string) => writeValue("mqttTransferGateId", gateId),
 };

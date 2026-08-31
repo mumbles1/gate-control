@@ -459,7 +459,7 @@ export function migrateGate(gate: GateConfiguration): GateConfiguration {
     mapping: { ...gate.mapping, stopped: gate.mapping?.stopped ?? "stopped" },
     advancedTopics: (() => {
       const removedControllerFields = new Set(["Light signal output", "Safety output status"]);
-      const migrated = (gate.advancedTopics ?? []).map((entry) => {
+      const migrated: AdditionalMQTTTopic[] = (gate.advancedTopics ?? []).map((entry): AdditionalMQTTTopic => {
         const renamedControllerFields: Record<string, string> = {
           "Remote input": "RF Remote sensor input",
           "Keypad input": "Keypad sensor input",

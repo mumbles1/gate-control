@@ -2,16 +2,20 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  AlertTriangle, ArrowDown, ArrowLeft, ArrowUp, CalendarDays, ChevronRight, CircleDot, Clock3, Copy, Send, Square,
-  Gauge, LayoutGrid, List, Menu, Monitor, Moon, Plus, Radio, Settings, SlidersHorizontal,
+  AlertTriangle, ArrowDown, ArrowLeft, ArrowUp, Bell, CalendarDays, ChevronRight, CircleDot, Clock3, CloudDownload, CloudUpload, Copy, Download, QrCode, RefreshCw, Send, Share2, Square,
+  Gauge, LayoutGrid, List, Menu, Monitor, Moon, Plus, Radio, Settings, SlidersHorizontal, Upload,
   Sun, Trash2, Wifi, WifiOff, X,
 } from "lucide-react";
 import { GateArtwork } from "./GateArtwork";
 import { GateEditor } from "./GateEditor";
 import { useMQTTManager } from "./mqtt-service";
 import { gateStorage } from "./storage";
+import { createGateTransfer, decryptConfiguration, downloadConfiguration, encryptConfiguration, gateTransferQRCode, gateTransferUrl, loadConfigurationFromMQTT, loadGateTransfer, publishConfigurationToMQTT, shareConfiguration } from "./configuration-transfer";
+import type { ConfigurationBundle } from "./configuration-transfer";
+import { createAlertIdentity, disableScheduleAlerts, enableScheduleAlerts, scheduleAlertState, syncScheduleAlerts, testScheduleAlert } from "./notifications";
+import type { AlertIdentity, ScheduleAlertState } from "./notifications";
 import type { AdditionalMQTTTopic, ColorTheme, DashboardLayout, GateConfiguration, GateDisplayMode, GateRuntimeState, GateState } from "./types";
-import { brokerUrl, cloneData, cloneGate, defaultGate, formatControllerTime12h, gateLocationLabel, gatePropertyLabel, gatePropertyOptions, gatesForProperty, schedulePayload, sortGates } from "./types";
+import { brokerUrl, cloneData, cloneGate, createId, defaultGate, formatControllerTime12h, gateLocationLabel, gatePropertyLabel, gatePropertyOptions, gatesForProperty, migrateGate, schedulePayload, sortGates, validateGate } from "./types";
 
 type Screen =
   | { name: "dashboard" }
@@ -42,8 +46,23 @@ function formatAge(timestamp?: number) {
   return `Updated ${Math.floor(seconds / 60)}m ago`;
 }
 
+function controllerOfflineDelayValue(value: string): number | null {
+  const seconds = Number(value);
+  return Number.isInteger(seconds) && seconds >= 15 && seconds <= 3600 ? seconds : null;
+}
+
+function gateTopics(gate: GateConfiguration): string[] {
+  return [gate.statusTopic, gate.availabilityTopic, gate.actions.pulse.topic, gate.actions.open.topic, gate.actions.close.topic, ...(gate.advancedTopics ?? []).map((entry) => entry.topic)]
+    .map((topic) => topic.trim().replace(/^\/+|\/+$/g, "")).filter(Boolean);
+}
+
 function ConnectionBadge({ runtime }: { runtime: GateRuntimeState }) {
   return <span className={`connection-badge ${runtime.connected ? "connection-badge--online" : "connection-badge--offline"}`}>{runtime.connected ? <Wifi /> : <WifiOff />}{runtime.connected ? "Connected" : "Offline"}</span>;
+}
+
+function ServerStatusBanner({ reachable }: { reachable: boolean | undefined }) {
+  if (reachable !== false) return null;
+  return <aside className="server-status-banner" role="alert"><AlertTriangle /><span><strong>App server unavailable</strong><small>Saved settings are still on this device, but updates and server features may not work. Check the network or server, then retry.</small></span><button type="button" onClick={() => window.location.reload()}><RefreshCw /> Retry</button></aside>;
 }
 
 function JogControls({ gate, runtime, stopAction, onPublish, onStop }: {
@@ -256,11 +275,29 @@ export function GateControlApp() {
   const [activeProperty, setActiveProperty] = useState("");
   const [screen, setScreen] = useState<Screen>({ name: "dashboard" });
   const [loaded, setLoaded] = useState(false);
+  const [scheduleAlertsEnabled, setScheduleAlertsEnabled] = useState(false);
+  const [alertIdentity, setAlertIdentity] = useState<AlertIdentity | null>(null);
+  const [alertState, setAlertState] = useState<ScheduleAlertState>("disabled");
+  const [alertBusy, setAlertBusy] = useState(false);
+  const [alertMessage, setAlertMessage] = useState("");
+  const [notificationContactEmail, setNotificationContactEmail] = useState("");
+  const [controllerOfflineDelay, setControllerOfflineDelay] = useState("15");
+  const [transferPassphrase, setTransferPassphrase] = useState("");
+  const [mqttTransferTopic, setMQTTTransferTopic] = useState("TurnageAutomation/GateControl/settings");
+  const [mqttTransferRetain, setMQTTTransferRetain] = useState(true);
+  const [mqttTransferGateId, setMQTTTransferGateId] = useState("");
+  const [transferScope, setTransferScope] = useState<"app" | "gate">("app");
+  const [transferBusy, setTransferBusy] = useState(false);
+  const [transferMessage, setTransferMessage] = useState("");
+  const [pendingGateTransferToken, setPendingGateTransferToken] = useState("");
+  const [qrShare, setQRShare] = useState<{ dataUrl: string; url: string; gateName: string; expiresAt: number } | null>(null);
+  const [serverReachable, setServerReachable] = useState<boolean | undefined>(undefined);
+  const transferFileInput = useRef<HTMLInputElement>(null);
   const detailOpenedAt = useRef(0);
   const { runtime, publish, publishAdvanced } = useMQTTManager(gates);
 
   useEffect(() => {
-    Promise.all([gateStorage.loadGates(), gateStorage.loadLayout(), gateStorage.loadTheme(), gateStorage.loadDisplayMode(), gateStorage.loadDefaultProperty()]).then(([savedGates, savedLayout, savedTheme, savedDisplayMode, savedDefaultProperty]) => {
+    Promise.all([gateStorage.loadGates(), gateStorage.loadLayout(), gateStorage.loadTheme(), gateStorage.loadDisplayMode(), gateStorage.loadDefaultProperty(), gateStorage.loadScheduleAlertsEnabled(), gateStorage.loadAlertIdentity(), gateStorage.loadNotificationContactEmail(), gateStorage.loadControllerOfflineDelay(), gateStorage.loadMQTTTransferTopic(), gateStorage.loadMQTTTransferRetain(), gateStorage.loadMQTTTransferGateId()]).then(([savedGates, savedLayout, savedTheme, savedDisplayMode, savedDefaultProperty, savedAlertsEnabled, savedIdentity, savedContactEmail, savedOfflineDelay, savedTransferTopic, savedTransferRetain, savedTransferGateId]) => {
       const properties = gatePropertyOptions(savedGates).map((option) => option.value);
       const selectedProperty = properties.includes(savedDefaultProperty) ? savedDefaultProperty : (properties[0] ?? "");
       setGates(savedGates.sort((a, b) => a.order - b.order));
@@ -269,10 +306,44 @@ export function GateControlApp() {
       setDisplayMode(savedDisplayMode);
       setDefaultProperty(selectedProperty);
       setActiveProperty(selectedProperty);
+      const identity = savedIdentity ?? createAlertIdentity();
+      if (!savedIdentity) void gateStorage.saveAlertIdentity(identity);
+      setAlertIdentity(identity);
+      setScheduleAlertsEnabled(savedAlertsEnabled);
+      setNotificationContactEmail(savedContactEmail);
+      setControllerOfflineDelay(String(Math.min(3600, Math.max(15, savedOfflineDelay || 15))));
+      setMQTTTransferTopic(savedTransferTopic);
+      setMQTTTransferRetain(savedTransferRetain);
+      setMQTTTransferGateId(savedGates.some((gate) => gate.id === savedTransferGateId) ? savedTransferGateId : (savedGates[0]?.id ?? ""));
       setLoaded(true);
     });
     navigator.serviceWorker?.register("/sw.js").catch(() => undefined);
   }, []);
+
+  useEffect(() => {
+    let stopped = false;
+    const checkServer = async () => {
+      try {
+        const response = await fetch("/api/health", { cache: "no-store", signal: AbortSignal.timeout(5_000) });
+        if (!stopped) setServerReachable(response.ok);
+      } catch { if (!stopped) setServerReachable(false); }
+    };
+    void checkServer();
+    const timer = window.setInterval(checkServer, 15_000);
+    window.addEventListener("online", checkServer);
+    window.addEventListener("offline", checkServer);
+    return () => { stopped = true; window.clearInterval(timer); window.removeEventListener("online", checkServer); window.removeEventListener("offline", checkServer); };
+  }, []);
+
+  useEffect(() => {
+    if (!loaded) return;
+    const token = new URLSearchParams(window.location.search).get("gateTransfer");
+    if (!token) return;
+    setPendingGateTransferToken(token);
+    setTransferScope("gate");
+    setTransferMessage("A shared gate is ready. Enter its transfer passphrase, then select Import shared gate.");
+    setScreen({ name: "appSettings" });
+  }, [loaded]);
 
   useEffect(() => { if (loaded) void gateStorage.saveGates(gates); }, [gates, loaded]);
   useEffect(() => { if (loaded) void gateStorage.saveLayout(layout); }, [layout, loaded]);
@@ -283,6 +354,213 @@ export function GateControlApp() {
     void gateStorage.saveTheme(theme);
     document.documentElement.dataset.theme = theme;
   }, [theme, loaded]);
+  useEffect(() => { if (loaded) void gateStorage.saveNotificationContactEmail(notificationContactEmail); }, [notificationContactEmail, loaded]);
+  useEffect(() => {
+    const seconds = controllerOfflineDelayValue(controllerOfflineDelay);
+    if (loaded && seconds !== null) void gateStorage.saveControllerOfflineDelay(seconds);
+  }, [controllerOfflineDelay, loaded]);
+  useEffect(() => { if (loaded) void gateStorage.saveMQTTTransferTopic(mqttTransferTopic); }, [mqttTransferTopic, loaded]);
+  useEffect(() => { if (loaded) void gateStorage.saveMQTTTransferRetain(mqttTransferRetain); }, [mqttTransferRetain, loaded]);
+  useEffect(() => { if (loaded) void gateStorage.saveMQTTTransferGateId(mqttTransferGateId); }, [mqttTransferGateId, loaded]);
+  useEffect(() => {
+    if (!loaded) return;
+    void scheduleAlertState(scheduleAlertsEnabled).then(setAlertState);
+  }, [loaded, scheduleAlertsEnabled]);
+  useEffect(() => {
+    const offlineDelay = controllerOfflineDelayValue(controllerOfflineDelay);
+    if (!loaded || !scheduleAlertsEnabled || !alertIdentity || offlineDelay === null) return;
+    const timer = window.setTimeout(() => {
+      void syncScheduleAlerts(gates, alertIdentity, notificationContactEmail, offlineDelay).then(() => setAlertState("enabled")).catch((error: unknown) => {
+        setAlertState("unavailable");
+        setAlertMessage(error instanceof Error ? error.message : "Could not update schedule alerts.");
+      });
+    }, 800);
+    return () => window.clearTimeout(timer);
+  }, [gates, loaded, scheduleAlertsEnabled, alertIdentity, notificationContactEmail, controllerOfflineDelay]);
+
+  const toggleScheduleAlerts = async () => {
+    if (!alertIdentity || alertBusy) return;
+    const offlineDelay = controllerOfflineDelayValue(controllerOfflineDelay);
+    if (offlineDelay === null) { setAlertMessage("Controller offline delay must be from 15 to 3600 seconds."); return; }
+    setAlertBusy(true); setAlertMessage("");
+    try {
+      if (scheduleAlertsEnabled) {
+        const warning = await disableScheduleAlerts(alertIdentity);
+        setScheduleAlertsEnabled(false); setAlertState("disabled");
+        await gateStorage.saveScheduleAlertsEnabled(false);
+        setAlertMessage(warning ? `Alerts are off on this device. ${warning}` : "Schedule failure alerts are off on this device.");
+      } else {
+        const result = await enableScheduleAlerts(gates, alertIdentity, notificationContactEmail, offlineDelay);
+        setScheduleAlertsEnabled(true); setAlertState("enabled");
+        await gateStorage.saveScheduleAlertsEnabled(true);
+        setAlertMessage(`Alerts enabled for ${result.monitoredGates ?? gates.length} configured gate${(result.monitoredGates ?? gates.length) === 1 ? "" : "s"}.`);
+      }
+    } catch (error) {
+      setAlertState(typeof Notification !== "undefined" && Notification.permission === "denied" ? "denied" : "unavailable");
+      setAlertMessage(error instanceof Error ? error.message : "Could not change schedule alerts.");
+    } finally { setAlertBusy(false); }
+  };
+
+  const sendTestScheduleAlert = async () => {
+    if (!alertIdentity || alertBusy) return;
+    setAlertBusy(true); setAlertMessage("");
+    try { await testScheduleAlert(alertIdentity); setAlertMessage("Test notification sent."); }
+    catch (error) { setAlertMessage(error instanceof Error ? error.message : "Could not send a test notification."); }
+    finally { setAlertBusy(false); }
+  };
+
+  const makeConfigurationBundle = (scope: "app" | "gate" = transferScope): ConfigurationBundle => ({
+    format: "gate-control-configuration",
+    version: 1,
+    scope,
+    exportedAt: new Date().toISOString(),
+    gates: cloneData(scope === "gate" ? gates.filter((gate) => gate.id === mqttTransferGateId) : gates),
+    settings: {
+      layout, theme, displayMode, defaultProperty, notificationContactEmail,
+      controllerOfflineDelaySeconds: controllerOfflineDelayValue(controllerOfflineDelay) ?? 15,
+      mqttTransferTopic, mqttTransferRetain,
+    },
+  });
+
+  const ensureTransferPassphrase = () => {
+    if (transferPassphrase.length < 8) throw new Error("Enter a transfer passphrase containing at least 8 characters.");
+  };
+
+  const checkedTransferTopic = () => {
+    const topic = mqttTransferTopic.trim().replace(/^\/+|\/+$/g, "");
+    if (!topic || topic.includes("#") || topic.includes("+")) throw new Error("Enter a specific MQTT configuration topic without wildcards.");
+    if (gates.some((gate) => gateTopics(gate).includes(topic))) throw new Error("The configuration topic cannot match any gate status or command topic.");
+    return topic;
+  };
+
+  const applyConfigurationBundle = (bundle: ConfigurationBundle) => {
+    const imported = bundle.gates.map(migrateGate).sort((a, b) => a.order - b.order);
+    if (bundle.scope === "gate") {
+      const gate = imported[0];
+      if (!gate || imported.length !== 1) throw new Error("This shared gate transfer is invalid.");
+      const remaining = gates.filter((item) => item.id !== gate.id);
+      const errors = validateGate(gate, [...remaining, gate]);
+      if (errors.length) throw new Error(`${gate.name || "Shared gate"}: ${errors[0]}`);
+      const replacing = gates.some((item) => item.id === gate.id);
+      if (!window.confirm(`${replacing ? "Replace" : "Add"} shared gate ${gate.name}?`)) return false;
+      setGates((current) => {
+        const existingIndex = current.findIndex((item) => item.id === gate.id);
+        if (existingIndex >= 0) return current.map((item, index) => index === existingIndex ? { ...gate, order: item.order } : item).sort((a, b) => a.order - b.order);
+        return [...current, { ...gate, order: current.length }];
+      });
+      setMQTTTransferGateId(gate.id);
+      return true;
+    }
+    for (const gate of imported) {
+      const errors = validateGate(gate, imported);
+      if (errors.length) throw new Error(`${gate.name || "Imported gate"}: ${errors[0]}`);
+    }
+    if (!window.confirm(`Replace this device's ${gates.length} configured gate${gates.length === 1 ? "" : "s"} with ${imported.length} imported gate${imported.length === 1 ? "" : "s"}?`)) return false;
+    const settings = bundle.settings;
+    if (!settings || typeof settings !== "object") throw new Error("The imported app settings are invalid.");
+    setGates(imported.map((gate, order) => ({ ...gate, order })));
+    if (["cards", "list", "compact"].includes(settings.layout)) setLayout(settings.layout);
+    if (["system", "light", "dark"].includes(settings.theme)) setTheme(settings.theme);
+    if (["all", "property"].includes(settings.displayMode)) setDisplayMode(settings.displayMode);
+    setDefaultProperty(settings.defaultProperty || imported[0]?.property || "");
+    setActiveProperty(settings.defaultProperty || imported[0]?.property || "");
+    setNotificationContactEmail(settings.notificationContactEmail || "");
+    setControllerOfflineDelay(String(Math.min(3600, Math.max(15, Number(settings.controllerOfflineDelaySeconds) || 15))));
+    const usedTopics = new Set(imported.flatMap(gateTopics));
+    const candidateTopic = String(settings.mqttTransferTopic || "TurnageAutomation/GateControl/settings").trim().replace(/^\/+|\/+$/g, "");
+    const defaultTopic = "TurnageAutomation/GateControl/settings";
+    const safeTopic = candidateTopic && !candidateTopic.includes("#") && !candidateTopic.includes("+") && !usedTopics.has(candidateTopic)
+      ? candidateTopic
+      : !usedTopics.has(defaultTopic) ? defaultTopic : `${defaultTopic}/${createId().replace(/-/g, "").slice(0, 8)}`;
+    setMQTTTransferTopic(safeTopic);
+    setMQTTTransferRetain(settings.mqttTransferRetain !== false);
+    setMQTTTransferGateId(imported[0]?.id ?? "");
+    return true;
+  };
+
+  const exportConfiguration = async (share: boolean) => {
+    setTransferBusy(true); setTransferMessage("");
+    try {
+      ensureTransferPassphrase();
+      const bundle = makeConfigurationBundle();
+      if (!bundle.gates.length) throw new Error(transferScope === "gate" ? "Select a gate to transfer." : "There are no gates to export.");
+      const payload = await encryptConfiguration(bundle, transferPassphrase);
+      if (share) {
+        const result = await shareConfiguration(payload);
+        setTransferMessage(result === "shared" ? "Encrypted configuration opened in the device Share Sheet." : "File sharing is unavailable, so the encrypted configuration was downloaded.");
+      } else {
+        downloadConfiguration(payload);
+        setTransferMessage("Encrypted configuration exported.");
+      }
+    } catch (error) { setTransferMessage(error instanceof Error ? error.message : "Configuration export failed."); }
+    finally { setTransferBusy(false); }
+  };
+
+  const shareGateByQRCode = async () => {
+    setTransferBusy(true); setTransferMessage("");
+    try {
+      ensureTransferPassphrase();
+      const gate = transferGate(); if (!gate) throw new Error("Select a gate to share.");
+      const payload = await encryptConfiguration(makeConfigurationBundle("gate"), transferPassphrase);
+      const transfer = await createGateTransfer(payload);
+      const url = gateTransferUrl(transfer.token);
+      setQRShare({ dataUrl: await gateTransferQRCode(url), url, gateName: gate.name, expiresAt: transfer.expiresAt });
+      setTransferMessage("Gate QR code created. It expires in 10 minutes.");
+    } catch (error) { setTransferMessage(error instanceof Error ? error.message : "Could not create the gate QR code."); }
+    finally { setTransferBusy(false); }
+  };
+
+  const importPendingGateTransfer = async () => {
+    if (!pendingGateTransferToken) return;
+    setTransferBusy(true); setTransferMessage("");
+    try {
+      ensureTransferPassphrase();
+      const bundle = await decryptConfiguration(await loadGateTransfer(pendingGateTransferToken), transferPassphrase);
+      if (bundle.scope !== "gate") throw new Error("This QR code does not contain one shared gate.");
+      if (applyConfigurationBundle(bundle)) {
+        setPendingGateTransferToken("");
+        window.history.replaceState({}, "", `${window.location.pathname}${window.location.hash}`);
+        setTransferMessage("Shared gate imported. Review and test its broker connection before operating it.");
+      }
+    } catch (error) { setTransferMessage(error instanceof Error ? error.message : "Could not import the shared gate."); }
+    finally { setTransferBusy(false); }
+  };
+
+  const importConfigurationFile = async (file: File | undefined) => {
+    if (!file) return;
+    setTransferBusy(true); setTransferMessage("");
+    try {
+      ensureTransferPassphrase();
+      const bundle = await decryptConfiguration(await file.text(), transferPassphrase);
+      if (applyConfigurationBundle(bundle)) setTransferMessage("Configuration imported. Notification permission remains specific to this device.");
+    } catch (error) { setTransferMessage(error instanceof Error ? error.message : "Configuration import failed."); }
+    finally { setTransferBusy(false); if (transferFileInput.current) transferFileInput.current.value = ""; }
+  };
+
+  const transferGate = () => gates.find((gate) => gate.id === mqttTransferGateId);
+  const publishMQTTConfiguration = async () => {
+    setTransferBusy(true); setTransferMessage("");
+    try {
+      ensureTransferPassphrase();
+      const gate = transferGate(); if (!gate) throw new Error("Select a configured gate broker for the transfer.");
+      const topic = checkedTransferTopic();
+      const payload = await encryptConfiguration(makeConfigurationBundle(), transferPassphrase);
+      await publishConfigurationToMQTT(gate, topic, payload, mqttTransferRetain);
+      setTransferMessage(mqttTransferRetain ? "Encrypted configuration published and retained." : "Encrypted configuration published without retention; any older retained copy was cleared.");
+    } catch (error) { setTransferMessage(error instanceof Error ? error.message : "MQTT configuration publish failed."); }
+    finally { setTransferBusy(false); }
+  };
+
+  const loadMQTTConfiguration = async () => {
+    setTransferBusy(true); setTransferMessage("");
+    try {
+      ensureTransferPassphrase();
+      const gate = transferGate(); if (!gate) throw new Error("Select a configured gate broker for the transfer.");
+      const bundle = await decryptConfiguration(await loadConfigurationFromMQTT(gate, checkedTransferTopic()), transferPassphrase);
+      if (applyConfigurationBundle(bundle)) setTransferMessage("Retained MQTT configuration loaded. Notification permission remains specific to this device.");
+    } catch (error) { setTransferMessage(error instanceof Error ? error.message : "MQTT configuration load failed."); }
+    finally { setTransferBusy(false); }
+  };
 
   const runtimeFor = (gate: GateConfiguration): GateRuntimeState => runtime[gate.id] ?? { state: "offline", connected: false };
   const connectedCount = gates.filter((gate) => runtimeFor(gate).connected).length;
@@ -338,7 +616,7 @@ export function GateControlApp() {
   if (!loaded) return <main className="loading-screen"><span className="brand-mark"><GateBrandIcon /></span><p>Loading Gate Control…</p></main>;
 
   if (screen.name === "editor") {
-    return <GateEditor initial={screen.gate} existing={gates} cloneDraft={screen.cloneDraft} advanced={screen.advanced} runtime={runtimeFor(screen.gate)} onPublishAdvanced={publishAdvanced} onSave={saveGate} onCancel={() => setScreen({ name: "setup" })} />;
+    return <><ServerStatusBanner reachable={serverReachable} /><GateEditor initial={screen.gate} existing={gates} cloneDraft={screen.cloneDraft} advanced={screen.advanced} runtime={runtimeFor(screen.gate)} onPublishAdvanced={publishAdvanced} onSave={saveGate} onCancel={() => setScreen({ name: "setup" })} /></>;
   }
 
   if (screen.name === "detail") {
@@ -349,6 +627,7 @@ export function GateControlApp() {
     const stopAction = actionByName("Stop command");
     return (
       <div className="app-shell">
+        <ServerStatusBanner reachable={serverReachable} />
         <main className="detail-page">
           <header className="topbar topbar--detail">
             <button className="icon-button" onClick={() => setScreen({ name: "dashboard" })} aria-label="Back to dashboard"><ArrowLeft /></button>
@@ -383,6 +662,7 @@ export function GateControlApp() {
   if (screen.name === "setup") {
     return (
       <div className="app-shell">
+        <ServerStatusBanner reachable={serverReachable} />
         <main className="setup-page">
           <header className="topbar">
             <div><p className="eyebrow">Configuration</p><h1>Setup</h1></div>
@@ -416,6 +696,7 @@ export function GateControlApp() {
   if (screen.name === "appSettings") {
     return (
       <div className="app-shell">
+        <ServerStatusBanner reachable={serverReachable} />
         <main className="setup-page">
           <header className="topbar"><div><p className="eyebrow">Turnage Automation</p><h1>App settings</h1></div></header>
           <section className="settings-section">
@@ -439,8 +720,46 @@ export function GateControlApp() {
               {([{ value: "system", label: "System", icon: <Monitor /> }, { value: "light", label: "Light", icon: <Sun /> }, { value: "dark", label: "Dark", icon: <Moon /> }] as const).map((option) => <button key={option.value} className={theme === option.value ? "active" : ""} onClick={() => setTheme(option.value)}>{option.icon}<span>{option.label}</span></button>)}
             </div>
           </section>
-          <section className="security-card"><span><GateBrandIcon /></span><div><h2>Gate Control</h2><p>Built for Turnage Automation gate integration systems. App preferences and MQTT gate configurations remain on this device.</p></div></section>
+          <section className="settings-section notification-settings">
+            <div className="section-copy"><span className="section-icon"><Bell /></span><div><h2>Gate notifications</h2><p>Notify this device about failed automatic schedules, controller Ethernet/Wi-Fi outages, and unreachable MQTT brokers.</p></div></div>
+            <div className="notification-controls">
+              <label className="notification-email"><span>Push service contact email <small>optional</small></span><input type="email" autoComplete="email" placeholder="Enter contact email" value={notificationContactEmail} onChange={(event) => setNotificationContactEmail(event.target.value)} /></label>
+              <label className="notification-delay"><span>Controller offline delay</span><span className="notification-delay-input"><input type="number" inputMode="numeric" min="15" max="3600" step="5" value={controllerOfflineDelay} onChange={(event) => setControllerOfflineDelay(event.target.value.replace(/\D/g, ""))} onBlur={() => { const value = Number(controllerOfflineDelay); setControllerOfflineDelay(String(Math.min(3600, Math.max(15, Number.isFinite(value) && value ? Math.round(value) : 15)))); }} /><small>seconds</small></span><small>Both Ethernet and Wi-Fi must remain LWT 0 for this long before an alert.</small></label>
+              <button type="button" role="switch" aria-checked={scheduleAlertsEnabled && alertState === "enabled"} className={`controller-switch notification-switch ${scheduleAlertsEnabled && alertState === "enabled" ? "controller-switch--on" : ""}`} disabled={alertBusy || alertState === "unsupported"} onClick={() => void toggleScheduleAlerts()}><span><strong>{scheduleAlertsEnabled ? "Alerts enabled" : "Alerts disabled"}</strong><small>{alertState === "unsupported" ? "Requires HTTPS and an installed Home Screen app on iPhone" : alertState === "denied" ? "Permission blocked in device settings" : "Monitored by the notification service"}</small></span><i /></button>
+              {scheduleAlertsEnabled && alertState === "enabled" && <button type="button" className="secondary-button notification-test" disabled={alertBusy} onClick={() => void sendTestScheduleAlert()}><Send /> Test alert</button>}
+              {alertMessage && <p className="notification-message" role="status">{alertMessage}</p>}
+              <p className="notification-note">The optional email identifies your Web Push service to browser providers; alerts still arrive as device notifications, not email. A schedule alert waits 90 seconds for the expected state. The dual-LWT delay is configurable above; broker-unreachable alerts wait 60 seconds. One alert is sent per outage. The monitor never moves the gate. On iPhone, open the HTTPS site from its Home Screen icon before enabling.</p>
+            </div>
+          </section>
+          <section className="settings-section transfer-settings">
+            <div className="section-copy"><span className="section-icon"><Share2 /></span><div><h2>Configuration transfer</h2><p>Clone app settings or one gate using an encrypted file, AirDrop, QR code, or MQTT.</p></div></div>
+            <div className="transfer-controls">
+              <label className="transfer-scope"><span>Transfer contents</span><select value={transferScope} onChange={(event) => setTransferScope(event.target.value as "app" | "gate")}><option value="app">All gates and app settings</option><option value="gate">One gate only</option></select></label>
+              {transferScope === "gate" && <label className="transfer-gate"><span>Gate to transfer</span><select value={mqttTransferGateId} disabled={!gates.length || transferBusy} onChange={(event) => setMQTTTransferGateId(event.target.value)}>{gates.length ? gates.map((gate) => <option key={gate.id} value={gate.id}>{gate.name}</option>) : <option value="">No gates configured</option>}</select></label>}
+              <label className="transfer-passphrase"><span>Transfer passphrase</span><input type="password" autoComplete="new-password" minLength={8} placeholder="At least 8 characters" value={transferPassphrase} onChange={(event) => setTransferPassphrase(event.target.value)} /><small>Required to encrypt and decrypt every transfer. It is never stored.</small></label>
+              <div className="transfer-file-actions">
+                <button type="button" className="secondary-button" disabled={transferBusy} onClick={() => void exportConfiguration(false)}><Download /> Export file</button>
+                <button type="button" className="secondary-button" disabled={transferBusy} onClick={() => void exportConfiguration(true)}><Share2 /> Share / AirDrop</button>
+                {transferScope === "gate" && <button type="button" className="secondary-button" disabled={transferBusy || !gates.length} onClick={() => void shareGateByQRCode()}><QrCode /> Share gate QR</button>}
+                <button type="button" className="secondary-button" disabled={transferBusy} onClick={() => transferFileInput.current?.click()}><Upload /> Import file</button>
+                <input ref={transferFileInput} className="transfer-file-input" type="file" accept=".gateconfig,application/json" onChange={(event) => void importConfigurationFile(event.target.files?.[0])} />
+              </div>
+              {pendingGateTransferToken && <button type="button" className="primary-button transfer-import-qr" disabled={transferBusy} onClick={() => void importPendingGateTransfer()}><QrCode /> Import shared gate</button>}
+              <div className="transfer-divider"><span>MQTT configuration topic</span></div>
+              <label><span>Broker connection</span><select value={mqttTransferGateId} disabled={!gates.length || transferBusy} onChange={(event) => setMQTTTransferGateId(event.target.value)}>{gates.length ? gates.map((gate) => <option key={gate.id} value={gate.id}>{gate.name} — {brokerUrl(gate.broker)}</option>) : <option value="">Configure a gate first</option>}</select></label>
+              <label><span>Configuration topic</span><input value={mqttTransferTopic} placeholder="TurnageAutomation/GateControl/settings" onChange={(event) => setMQTTTransferTopic(event.target.value)} /></label>
+              <button type="button" role="switch" aria-checked={mqttTransferRetain} className={`controller-switch transfer-retain ${mqttTransferRetain ? "controller-switch--on" : ""}`} onClick={() => setMQTTTransferRetain((current) => !current)}><span><strong>Retain MQTT configuration</strong><small>{mqttTransferRetain ? "New devices can load the latest copy" : "Publish once and clear any older retained copy"}</small></span><i /></button>
+              <div className="transfer-mqtt-actions">
+                <button type="button" className="secondary-button" disabled={transferBusy || !gates.length} onClick={() => void publishMQTTConfiguration()}><CloudUpload /> Publish settings</button>
+                <button type="button" className="secondary-button" disabled={transferBusy || !gates.length} onClick={() => void loadMQTTConfiguration()}><CloudDownload /> Load settings</button>
+              </div>
+              {transferMessage && <p className="transfer-message" role="status">{transferMessage}</p>}
+              <p className="transfer-note">Transfers include MQTT credentials, so always use a strong passphrase and restrict this topic with Mosquitto ACLs. Full-app imports replace this device's gates; one-gate imports add or update only that gate. Push permission and notification device identity are never cloned. QR transfers expire after 10 minutes.</p>
+            </div>
+          </section>
+          <section className="security-card"><span><GateBrandIcon /></span><div><h2>Gate Control</h2><p>Built for Turnage Automation gate integration systems. Configuration stays on this device unless notifications or configuration transfer are used; every exported or published transfer is encrypted.</p></div></section>
         </main>
+        {qrShare && <div className="qr-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setQRShare(null); }}><section className="qr-dialog" role="dialog" aria-modal="true" aria-labelledby="gate-qr-title"><header><div><p className="eyebrow">Encrypted gate transfer</p><h2 id="gate-qr-title">Share {qrShare.gateName}</h2></div><button type="button" className="icon-button" aria-label="Close QR code" onClick={() => setQRShare(null)}><X /></button></header><img src={qrShare.dataUrl} alt={`QR code for sharing ${qrShare.gateName}`} /><p>On the other device, scan this code with its camera. Open Gate Control, enter the same passphrase, then import the shared gate.</p><strong>Expires {new Date(qrShare.expiresAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</strong><a className="secondary-button" href={qrShare.url} target="_blank" rel="noreferrer"><QrCode /> Open link on this device</a></section></div>}
         <AppNav screen={screen} onDashboard={() => setScreen({ name: "dashboard" })} onSetup={() => setScreen({ name: "setup" })} onAppSettings={() => setScreen({ name: "appSettings" })} />
       </div>
     );
@@ -448,6 +767,7 @@ export function GateControlApp() {
 
   return (
     <div className="app-shell">
+      <ServerStatusBanner reachable={serverReachable} />
       <main className="dashboard-page">
         <header className="dashboard-header">
           <div className="brand"><span className="brand-mark"><GateBrandIcon /></span><div><p>Gate Control</p><span>Turnage Automation</span></div></div>
