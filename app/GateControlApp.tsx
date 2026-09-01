@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  AlertTriangle, ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Bell, Bug, CalendarDays, Camera, ChevronRight, CircleDot, CircleSlash2, Clock3, CloudDownload, CloudUpload, Copy, Download, QrCode, RefreshCw, Send, Share2, Smartphone, Square,
+  AlertTriangle, ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Bell, CalendarDays, Camera, ChevronRight, CircleDot, CircleSlash2, Clock3, CloudDownload, CloudUpload, Copy, Download, QrCode, RefreshCw, Send, Share2, Smartphone, Square,
   Gauge, LayoutGrid, List, Menu, Monitor, Moon, Plus, Radio, Settings, SlidersHorizontal, Upload,
   Sun, Trash2, Wifi, WifiOff, X,
 } from "lucide-react";
@@ -48,6 +48,10 @@ function GateBrandIcon() {
   return <img className="gate-brand-icon" src="/gate-icon.svg" alt="" aria-hidden="true" />;
 }
 
+function MosquittoIcon() {
+  return <img className="mosquitto-logo" src="/mosquitto-logo.svg" alt="" aria-hidden="true" />;
+}
+
 function formatAge(timestamp?: number) {
   if (!timestamp) return "No status received";
   const seconds = Math.max(0, Math.floor((Date.now() - timestamp) / 1000));
@@ -68,7 +72,7 @@ function gateTopics(gate: GateConfiguration): string[] {
 
 function ConnectionBadge({ runtime }: { runtime: GateRuntimeState }) {
   return <span title={runtime.error || (runtime.connected ? "This device is connected to the Mosquitto broker" : "This device is not connected to the Mosquitto broker")} className={`connection-badge ${runtime.connected ? "connection-badge--online" : "connection-badge--offline"}`}>
-    <span className="connection-path-icons" aria-hidden="true"><Smartphone /><ArrowRight /><Bug /></span>
+    <span className="connection-path-icons" aria-hidden="true"><Smartphone /><ArrowRight /><MosquittoIcon /></span>
     {runtime.connected ? "Broker linked" : "Broker offline"}
   </span>;
 }
@@ -82,7 +86,7 @@ function GateControllerStatusMark({ runtime, state }: { runtime: GateRuntimeStat
   return <span className="controller-offline-path" title="Gate controller is not connected to the MQTT broker" aria-label="Gate controller disconnected from MQTT broker">
     <span className="controller-gate-icon"><GateBrandIcon /></span>
     <ArrowRight />
-    <span className="controller-broker-blocked"><Bug /><CircleSlash2 /></span>
+    <span className="controller-broker-blocked"><MosquittoIcon /><CircleSlash2 /></span>
   </span>;
 }
 
