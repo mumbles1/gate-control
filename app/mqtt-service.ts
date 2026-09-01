@@ -63,20 +63,17 @@ export function useMQTTManager(gates: GateConfiguration[]) {
   const updateBrokerSignal = useCallback((id: string, channel: "ethernet" | "wifi", online: boolean, at: number) => {
     const signals = { ...(brokerSignals.current.get(id) ?? {}), [channel]: online };
     brokerSignals.current.set(id, signals);
-    const controllerOnline = signals.ethernet === true || signals.wifi === true;
-    const controllerOffline = (signals.ethernet === false || signals.wifi === false)
-      && signals.ethernet !== true && signals.wifi !== true;
+    const controllerOffline = signals.ethernet === false || signals.wifi === false;
+    const controllerOnline = !controllerOffline && (signals.ethernet === true || signals.wifi === true);
     setRuntime((current) => {
       const previous = current[id] ?? offlineRuntime();
-      const connected = controllerOnline ? true : controllerOffline ? false : previous.connected;
+      const controllerConnected = controllerOnline ? true : controllerOffline ? false : previous.controllerConnected;
       return {
         ...current,
         [id]: {
           ...previous,
-          connected,
-          state: connected ? (previous.state === "offline" ? "unknown" : previous.state) : "offline",
+          controllerConnected,
           lastMessageAt: at,
-          error: controllerOffline ? "Controller reports no active Ethernet or Wi-Fi connection" : connected ? undefined : previous.error,
         },
       };
     });
@@ -126,7 +123,7 @@ export function useMQTTManager(gates: GateConfiguration[]) {
         for (const gate of groupedGates) {
           brokerSignals.current.delete(gate.id);
           controllerSignals.current.delete(gate.id);
-          updateGate(gate.id, { connected: true, state: "unknown", warning: undefined, error: undefined });
+          updateGate(gate.id, { connected: true, controllerConnected: undefined, state: "unknown", warning: undefined, error: undefined });
         }
         if (subscriptions.length) client.subscribe(subscriptions, { qos: 0 });
         if (advancedQos0.length) client.subscribe(advancedQos0, { qos: 0 });

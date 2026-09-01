@@ -199,11 +199,17 @@ export function jogMacroDefinition(gate: GateConfiguration, direction: "open" | 
 export interface GateRuntimeState {
   state: GateState;
   connected: boolean;
+  /** Gate controller's own Ethernet/Wi-Fi connection to the MQTT broker. */
+  controllerConnected?: boolean;
   lastMessageAt?: number;
   lastPublish?: { ok: boolean; message: string; at: number };
   mqttSignals?: Record<string, { name: string; payload: string; at: number }>;
   warning?: string;
   error?: string;
+}
+
+export function displayedGateState(runtime: GateRuntimeState): GateState {
+  return runtime.controllerConnected === false ? "offline" : runtime.state;
 }
 
 export function topicDefaults(property: string, location: string) {

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  AlertTriangle, ArrowDown, ArrowLeft, ArrowUp, Bell, CalendarDays, Camera, ChevronRight, CircleDot, Clock3, CloudDownload, CloudUpload, Copy, Download, QrCode, RefreshCw, Send, Share2, Square,
+  AlertTriangle, ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Bell, Bug, CalendarDays, Camera, ChevronRight, CircleDot, CircleSlash2, Clock3, CloudDownload, CloudUpload, Copy, Download, QrCode, RefreshCw, Send, Share2, Smartphone, Square,
   Gauge, LayoutGrid, List, Menu, Monitor, Moon, Plus, Radio, Settings, SlidersHorizontal, Upload,
   Sun, Trash2, Wifi, WifiOff, X,
 } from "lucide-react";
@@ -17,7 +17,7 @@ import type { ConfigurationBundle } from "./configuration-transfer";
 import { createAlertIdentity, disableScheduleAlerts, enableScheduleAlerts, scheduleAlertState, syncScheduleAlerts, testScheduleAlert } from "./notifications";
 import type { AlertIdentity, ScheduleAlertState } from "./notifications";
 import type { AdditionalMQTTTopic, ColorTheme, DashboardLayout, GateConfiguration, GateDisplayMode, GateRuntimeState, GateState } from "./types";
-import { brokerUrl, cloneData, cloneGate, configurationTransferTopic, createId, defaultGate, formatControllerTime12h, gateLocationLabel, gatePropertyLabel, gatePropertyOptions, gatesForProperty, migrateGate, schedulePayload, sortGates, validateGate } from "./types";
+import { brokerUrl, cloneData, cloneGate, configurationTransferTopic, createId, defaultGate, displayedGateState, formatControllerTime12h, gateLocationLabel, gatePropertyLabel, gatePropertyOptions, gatesForProperty, migrateGate, schedulePayload, sortGates, validateGate } from "./types";
 
 type Screen =
   | { name: "dashboard" }
@@ -67,7 +67,23 @@ function gateTopics(gate: GateConfiguration): string[] {
 }
 
 function ConnectionBadge({ runtime }: { runtime: GateRuntimeState }) {
-  return <span title={runtime.error} className={`connection-badge ${runtime.connected ? "connection-badge--online" : "connection-badge--offline"}`}>{runtime.connected ? <Wifi /> : <WifiOff />}{runtime.connected ? "Connected" : "Offline"}</span>;
+  return <span title={runtime.error || (runtime.connected ? "This device is connected to the Mosquitto broker" : "This device is not connected to the Mosquitto broker")} className={`connection-badge ${runtime.connected ? "connection-badge--online" : "connection-badge--offline"}`}>
+    <span className="connection-path-icons" aria-hidden="true"><Smartphone /><ArrowRight /><Bug /></span>
+    {runtime.connected ? "Broker linked" : "Broker offline"}
+  </span>;
+}
+
+function displayedGateLabel(runtime: GateRuntimeState): string {
+  return runtime.controllerConnected === false ? "Gate not connected to broker" : stateLabels[displayedGateState(runtime)];
+}
+
+function GateControllerStatusMark({ runtime, state }: { runtime: GateRuntimeState; state: GateState }) {
+  if (runtime.controllerConnected !== false) return <span className={`state-dot state-dot--${state}`} />;
+  return <span className="controller-offline-path" title="Gate controller is not connected to the MQTT broker" aria-label="Gate controller disconnected from MQTT broker">
+    <span className="controller-gate-icon"><GateBrandIcon /></span>
+    <ArrowRight />
+    <span className="controller-broker-blocked"><Bug /><CircleSlash2 /></span>
+  </span>;
 }
 
 function ServerStatusBanner({ reachable }: { reachable: boolean | undefined }) {
@@ -763,6 +779,7 @@ export function GateControlApp() {
     const gate = gates.find((item) => item.id === screen.gateId);
     if (!gate) return null;
     const live = runtimeFor(gate);
+    const visibleState = displayedGateState(live);
     const actionByName = (name: string) => gate.advancedTopics.find((entry) => entry.direction === "publish" && entry.name === name);
     const stopAction = actionByName("Stop command");
     return (
@@ -774,11 +791,11 @@ export function GateControlApp() {
             <div className="detail-title"><p className="eyebrow">Gate detail</p><h1>{gate.name}</h1></div>
             <button className="icon-button" onClick={() => setScreen({ name: "editor", gate: cloneData(gate) })} aria-label="Edit gate"><SlidersHorizontal /></button>
           </header>
-          <section className={`detail-hero state-surface--${live.state}`}>
-            <div className="detail-status-line"><span className={`state-dot state-dot--${live.state}`} /><strong>{stateLabels[live.state]}</strong><ConnectionBadge runtime={live} /></div>
+          <section className={`detail-hero state-surface--${visibleState}`}>
+            <div className="detail-status-line"><GateControllerStatusMark runtime={live} state={visibleState} /><strong>{displayedGateLabel(live)}</strong><ConnectionBadge runtime={live} /></div>
             {live.warning && <div className="gate-warning gate-warning--detail" role="status"><AlertTriangle />{live.warning}</div>}
             {live.error && <div className="connection-error" role="status"><WifiOff />{live.error}</div>}
-            <GateArtwork style={gate.visualStyle} state={live.state} large onActivate={() => activateGraphic(gate)} />
+            <GateArtwork style={gate.visualStyle} state={visibleState} large onActivate={() => activateGraphic(gate)} />
             <div className="detail-meta"><span>{formatAge(live.lastMessageAt)}</span><span>{brokerUrl(gate.broker)}</span></div>
           </section>
           <section className="control-panel" aria-label="Gate controls">
@@ -813,8 +830,9 @@ export function GateControlApp() {
             <div className="list-heading"><div><p className="eyebrow">Configured endpoints</p><h2>{gates.length} {gates.length === 1 ? "gate" : "gates"}</h2></div><span>Hold Edit for 5 seconds to open advanced settings</span></div>
             {gates.length === 0 ? <EmptySetup onAdd={() => setScreen({ name: "editor", gate: defaultGate(0) })} /> : sortedGates.map((gate, index) => {
               const live = runtimeFor(gate);
+              const visibleState = displayedGateState(live);
               return <article className="setup-gate-row" key={gate.id}>
-                <div className={`mini-state mini-state--${live.state}`}><GateArtwork style={gate.visualStyle} state={live.state} onActivate={() => setScreen({ name: "detail", gateId: gate.id })} activationLabel={`Open ${gate.name} controls.`} /></div>
+                <div className={`mini-state mini-state--${visibleState}`}><GateArtwork style={gate.visualStyle} state={visibleState} onActivate={() => setScreen({ name: "detail", gateId: gate.id })} activationLabel={`Open ${gate.name} controls.`} /></div>
                 <div className="setup-gate-copy"><h3>{gate.name}</h3><p>{gatePropertyLabel(gate)} / {gateLocationLabel(gate)} · {brokerUrl(gate.broker)}</p><span>{gate.statusTopic}</span></div>
                 <ConnectionBadge runtime={live} />
                 <div className="row-actions">
@@ -952,10 +970,11 @@ export function GateControlApp() {
         <section className="dashboard-intro"><div><p className="eyebrow">Live overview</p><h1>{displayMode === "property" && activeProperty ? activePropertyLabel : "All gates"}</h1></div><div className="dashboard-sort-controls"><label><span>Order</span><select value={displayMode} onChange={(event) => { const mode = event.target.value as GateDisplayMode; setDisplayMode(mode); if (mode === "property" && !properties.includes(activeProperty)) setActiveProperty(properties.includes(defaultProperty) ? defaultProperty : (properties[0] ?? "")); }}><option value="all">Show All</option><option value="property">Property</option></select></label>{displayMode === "property" && <label><span>Property</span><select value={activeProperty} onChange={(event) => setActiveProperty(event.target.value)}>{propertyOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>}</div></section>
         {gates.length === 0 ? <EmptyDashboard onAdd={() => setScreen({ name: "editor", gate: defaultGate(0) })} /> : dashboardGates.length === 0 ? <section className="empty-dashboard compact-empty"><p className="eyebrow">No matching gates</p><h2>{activeProperty || "Property"}</h2><p>Choose another property from the dashboard control or update gate setup.</p></section> : <section className={`gate-collection gate-collection--${layout}`}>{dashboardGates.map((gate) => {
           const live = runtimeFor(gate);
-          return <article className={`gate-card gate-card--${live.state}`} key={gate.id} onClick={() => openGateDetail(gate.id)} onKeyDown={(event) => { if (event.key === "Enter") openGateDetail(gate.id); }} role="button" tabIndex={0} aria-label={`Open ${gate.name} details`}>
+          const visibleState = displayedGateState(live);
+          return <article className={`gate-card gate-card--${visibleState}`} key={gate.id} onClick={() => openGateDetail(gate.id)} onKeyDown={(event) => { if (event.key === "Enter") openGateDetail(gate.id); }} role="button" tabIndex={0} aria-label={`Open ${gate.name} details`}>
             <div className="gate-card-top"><div><p className="gate-index">{gatePropertyLabel(gate)} / {gateLocationLabel(gate)}</p><h2>{gate.name}</h2></div><ConnectionBadge runtime={live} /></div>
-            <div className="gate-card-art" onClick={(event) => event.stopPropagation()}><GateArtwork style={gate.visualStyle} state={live.state} onActivate={() => activateGraphic(gate)} /></div>
-            <div className="gate-card-bottom"><div className="state-copy"><span className={`state-dot state-dot--${live.state}`} /><div><strong>{stateLabels[live.state]}</strong><span>{formatAge(live.lastMessageAt)}</span>{live.warning && <span className="gate-warning" role="status"><AlertTriangle />{live.warning}</span>}</div></div><ChevronRight /></div>
+            <div className="gate-card-art" onClick={(event) => event.stopPropagation()}><GateArtwork style={gate.visualStyle} state={visibleState} onActivate={() => activateGraphic(gate)} /></div>
+            <div className="gate-card-bottom"><div className="state-copy"><GateControllerStatusMark runtime={live} state={visibleState} /><div><strong>{displayedGateLabel(live)}</strong><span>{formatAge(live.lastMessageAt)}</span>{live.warning && <span className="gate-warning" role="status"><AlertTriangle />{live.warning}</span>}</div></div><ChevronRight /></div>
           </article>;
         })}</section>}
       </main>
