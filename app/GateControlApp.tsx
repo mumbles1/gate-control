@@ -413,7 +413,7 @@ export function GateControlApp() {
   useEffect(() => { if (loaded) void gateStorage.saveMQTTTransferTopic(mqttTransferTopic); }, [mqttTransferTopic, loaded]);
   useEffect(() => { if (loaded) void gateStorage.saveMQTTTransferRetain(mqttTransferRetain); }, [mqttTransferRetain, loaded]);
   useEffect(() => { if (loaded) void gateStorage.saveMQTTTransferGateId(mqttTransferGateId); }, [mqttTransferGateId, loaded]);
-  useEffect(() => { setPreparedSharePayload(""); }, [gates, layout, theme, displayMode, defaultProperty, notificationContactEmail, controllerOfflineDelay, mqttTransferTopic, mqttTransferRetain, mqttTransferGateId, transferScope]);
+  useEffect(() => { setPreparedShareLink(""); }, [gates, layout, theme, displayMode, defaultProperty, notificationContactEmail, controllerOfflineDelay, mqttTransferTopic, mqttTransferRetain, mqttTransferGateId, transferScope]);
   useEffect(() => {
     if (!loaded) return;
     void scheduleAlertState(scheduleAlertsEnabled).then(setAlertState);
