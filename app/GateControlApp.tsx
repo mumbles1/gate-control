@@ -12,7 +12,7 @@ import { ConfigurationQRScanner } from "./ConfigurationQRScanner";
 import { APP_VERSION } from "./app-version";
 import { useMQTTManager } from "./mqtt-service";
 import { gateStorage } from "./storage";
-import { createGateTransfer, decryptConfiguration, downloadConfiguration, encryptConfiguration, gateTransferQRCode, loadConfigurationFromMQTT, loadGateTransfer, publishConfigurationToMQTT, shareConfiguration } from "./configuration-transfer";
+import { createGateTransfer, decryptConfiguration, downloadConfiguration, encryptConfiguration, gateTransferQRCode, loadConfigurationFromMQTT, loadGateTransfer, publishConfigurationToMQTT, shareConfigurationLink } from "./configuration-transfer";
 import type { ConfigurationBundle } from "./configuration-transfer";
 import { createAlertIdentity, disableScheduleAlerts, enableScheduleAlerts, scheduleAlertState, syncScheduleAlerts, testScheduleAlert } from "./notifications";
 import type { AlertIdentity, ScheduleAlertState } from "./notifications";
@@ -298,7 +298,7 @@ export function GateControlApp() {
   const [transferScope, setTransferScope] = useState<"app" | "gate">("app");
   const [transferBusy, setTransferBusy] = useState(false);
   const [transferMessage, setTransferMessage] = useState("");
-  const [preparedSharePayload, setPreparedSharePayload] = useState("");
+  const [preparedShareLink, setPreparedShareLink] = useState("");
   const [pendingGateTransferToken, setPendingGateTransferToken] = useState("");
   const [qrShare, setQRShare] = useState<{ dataUrl: string; url: string; transferName: string; expiresAt: number } | null>(null);
   const [qrScannerOpen, setQRScannerOpen] = useState(false);
@@ -583,23 +583,25 @@ export function GateControlApp() {
   };
 
   const exportConfiguration = async (share: boolean) => {
-    setTransferBusy(true); setTransferMessage(share ? (preparedSharePayload ? "Opening the device Share Sheet…" : "Preparing file for sharing…") : "Preparing export…");
+    setTransferBusy(true); setTransferMessage(share ? (preparedShareLink ? "Opening the device Share Sheet…" : "Preparing a temporary clone link…") : "Preparing backup file…");
     try {
-      if (share && preparedSharePayload) {
-        const result = await shareConfiguration(preparedSharePayload);
-        setPreparedSharePayload("");
-        setTransferMessage(result === "shared" ? "Configuration opened in the device Share Sheet." : "File sharing is unavailable, so the configuration was downloaded.");
+      if (share && preparedShareLink) {
+        const result = await shareConfigurationLink(preparedShareLink);
+        setPreparedShareLink("");
+        setTransferMessage(result === "shared" ? "Clone link opened in the device Share Sheet." : "Clone link copied. Open it on the new device within 10 minutes.");
         return;
       }
       const bundle = makeConfigurationBundle();
       if (!bundle.gates.length) throw new Error(transferScope === "gate" ? "Select a gate to transfer." : "There are no gates to export.");
       const payload = await encryptConfiguration(bundle, "");
       if (share) {
-        setPreparedSharePayload(payload);
-        setTransferMessage("File prepared. Tap Open Share / AirDrop to open the device Share Sheet.");
+        const transfer = await createGateTransfer(payload);
+        if (!transfer.url) throw new Error("The app server did not provide a transfer address.");
+        setPreparedShareLink(transfer.url);
+        setTransferMessage("Clone link prepared. Tap Open Share / AirDrop and send it to the new device within 10 minutes.");
       } else {
         downloadConfiguration(payload);
-        setTransferMessage("Configuration exported.");
+        setTransferMessage("Backup file saved. Import it from inside Gate Control on the new device.");
       }
     } catch (error) { setTransferMessage(error instanceof Error ? error.message : "Configuration export failed."); }
     finally { setTransferBusy(false); }
@@ -879,18 +881,20 @@ export function GateControlApp() {
                 <header><strong>2. Transfer directly</strong><span>Choose one sharing method</span></header>
                 <div className="transfer-methods">
                   <article className="transfer-method">
-                    <header><span className="transfer-method-icon"><Download /></span><div><strong>File</strong><small>Save a copy or load one from this device</small></div></header>
+                    <header><span className="transfer-method-icon"><Download /></span><div><strong>Backup file</strong><small>Save a durable copy or import one inside Gate Control</small></div></header>
                     <div className="transfer-method-actions">
-                      <button type="button" className="secondary-button" disabled={transferBusy} onClick={() => void exportConfiguration(false)}><Download /> Export file</button>
-                      <button type="button" className="secondary-button" disabled={transferBusy} onClick={() => transferFileInput.current?.click()}><Upload /> Import file</button>
+                      <button type="button" className="secondary-button" disabled={transferBusy} onClick={() => void exportConfiguration(false)}><Download /> Save backup</button>
+                      <button type="button" className="secondary-button" disabled={transferBusy} onClick={() => transferFileInput.current?.click()}><Upload /> Import backup</button>
                     </div>
+                    <p className="transfer-method-note">On iPhone, open Gate Control first and select Import backup; tapping a .gateconfig file in Files may not launch the app.</p>
                     <input ref={transferFileInput} className="transfer-file-input" type="file" accept=".gateconfig,application/vnd.turnageautomation.gate-control+json,application/json" onChange={(event) => void importConfigurationFile(event.target.files?.[0])} />
                   </article>
                   <article className="transfer-method">
-                    <header><span className="transfer-method-icon"><Share2 /></span><div><strong>AirDrop or device share</strong><small>Open the device Share Sheet</small></div></header>
+                    <header><span className="transfer-method-icon"><Share2 /></span><div><strong>AirDrop or device share</strong><small>Send a temporary clone link to another device</small></div></header>
                     <div className="transfer-method-actions">
-                      <button type="button" className={preparedSharePayload ? "primary-button" : "secondary-button"} disabled={transferBusy} onClick={() => void exportConfiguration(true)}><Share2 /> {preparedSharePayload ? "Open Share / AirDrop" : "Prepare Share / AirDrop"}</button>
+                      <button type="button" className={preparedShareLink ? "primary-button" : "secondary-button"} disabled={transferBusy} onClick={() => void exportConfiguration(true)}><Share2 /> {preparedShareLink ? "Open Share / AirDrop" : "Prepare clone link"}</button>
                     </div>
+                    <p className="transfer-method-note">The recipient opens the link in Gate Control and confirms the import. Links expire after 10 minutes.</p>
                   </article>
                   <article className="transfer-method">
                     <header><span className="transfer-method-icon"><QrCode /></span><div><strong>QR code</strong><small>Share or scan one gate</small></div></header>

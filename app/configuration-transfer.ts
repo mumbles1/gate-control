@@ -151,6 +151,20 @@ export async function shareConfiguration(payload: string): Promise<"shared" | "d
   return "downloaded";
 }
 
+export async function shareConfigurationLink(url: string): Promise<"shared" | "copied"> {
+  if (typeof navigator.share === "function") {
+    await navigator.share({
+      title: "Gate Control configuration",
+      text: "Open this link on the new device to import the Gate Control configuration. The link expires in 10 minutes.",
+      url,
+    });
+    return "shared";
+  }
+  if (!navigator.clipboard?.writeText) throw new Error("Device sharing is unavailable. Use the QR code or export a backup file instead.");
+  await navigator.clipboard.writeText(url);
+  return "copied";
+}
+
 async function transferApi(body: unknown) {
   const response = await fetch("/api/transfers", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
   const result = await response.json().catch(() => ({}));
