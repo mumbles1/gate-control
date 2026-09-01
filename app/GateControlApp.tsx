@@ -686,6 +686,21 @@ export function GateControlApp() {
     }
   };
 
+  const importAirDropLink = () => {
+    const value = window.prompt("Paste the Gate Control AirDrop link you received:", "");
+    if (!value?.trim()) return;
+    try {
+      const shared = new URL(value.trim(), window.location.origin);
+      const token = shared.searchParams.get("gateTransfer")?.trim();
+      if (!token) throw new Error("This is not a Gate Control AirDrop link.");
+      setPendingGateTransferToken(token);
+      setPendingTransferSource("link");
+      setTransferMessage("AirDrop link received. Select Receive configuration below to continue.");
+    } catch (error) {
+      setTransferMessage(error instanceof Error ? error.message : "That AirDrop link could not be read.");
+    }
+  };
+
   const importConfigurationFile = async (file: File | undefined) => {
     if (!file) return;
     setTransferBusy(true); setTransferMessage("Installing configuration from file…");
@@ -937,6 +952,7 @@ export function GateControlApp() {
                     <div className="transfer-method-actions">
                       <button type="button" className="secondary-button" disabled={transferBusy} onClick={() => void prepareAirDropLink()}><Share2 /> Prepare AirDrop link</button>
                       <button type="button" className="secondary-button" disabled={transferBusy || !preparedShareLink} onClick={() => void sendWithAirDrop()}><Send /> Send with AirDrop</button>
+                      <button type="button" className="secondary-button" disabled={transferBusy} onClick={importAirDropLink}><Upload /> Import AirDrop link</button>
                       {pendingGateTransferToken && pendingTransferSource === "link" && <button type="button" className="primary-button" disabled={transferBusy} onClick={() => void importPendingGateTransfer()}><CloudDownload /> Receive configuration</button>}
                     </div>
                     <p className="transfer-method-note">The recipient opens the link in Gate Control and confirms the import. Links expire after 10 minutes.</p>
