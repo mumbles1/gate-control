@@ -300,6 +300,7 @@ export function GateControlApp() {
   const [transferMessage, setTransferMessage] = useState("");
   const [preparedShareLink, setPreparedShareLink] = useState("");
   const [pendingGateTransferToken, setPendingGateTransferToken] = useState("");
+  const [pendingTransferSource, setPendingTransferSource] = useState<"link" | "qr">("link");
   const [qrShare, setQRShare] = useState<{ dataUrl: string; url: string; transferName: string; expiresAt: number } | null>(null);
   const [qrScannerOpen, setQRScannerOpen] = useState(false);
   const [serverReachable, setServerReachable] = useState<boolean | undefined>(undefined);
@@ -367,6 +368,7 @@ export function GateControlApp() {
     }
     if (!token) return;
     setPendingGateTransferToken(token);
+    setPendingTransferSource("link");
     setTransferMessage("A shared configuration is ready. Select Import shared configuration to continue.");
     setScreen({ name: "appSettings" });
   }, [loaded]);
@@ -626,6 +628,7 @@ export function GateControlApp() {
       const bundle = await decryptConfiguration(await loadGateTransfer(pendingGateTransferToken), "");
       if (applyConfigurationBundle(bundle)) {
         setPendingGateTransferToken("");
+        setPendingTransferSource("link");
         window.history.replaceState({}, "", `${window.location.pathname}${window.location.hash}`);
         setTransferMessage(bundle.scope === "gate" ? "Shared gate imported. Review and test its broker connection before operating it." : "Shared app configuration imported. Review and test each broker connection before operating gates.");
       }
@@ -639,6 +642,7 @@ export function GateControlApp() {
       const token = scanned.searchParams.get("gateTransfer")?.trim();
       if (!token) throw new Error("This is not a Gate Control configuration QR code.");
       setPendingGateTransferToken(token);
+      setPendingTransferSource("qr");
       setQRScannerOpen(false);
       setTransferMessage("QR code scanned. Select Import shared configuration to continue.");
     } catch (error) {
@@ -870,6 +874,12 @@ export function GateControlApp() {
                 </div>
               </section>
               {transferMessage && <p className={`transfer-message transfer-message--near ${/failed|cannot|could not|requires|enter|select|timed out|rejected|unavailable/i.test(transferMessage) ? "transfer-message--error" : ""}`} role="status">{transferMessage}</p>}
+              {pendingGateTransferToken && <section className="transfer-group transfer-group--received">
+                <header><strong>Received configuration</strong><span>{pendingTransferSource === "qr" ? "Ready from the scanned QR code" : "Ready from the shared AirDrop link"}</span></header>
+                <button type="button" className="primary-button" disabled={transferBusy} onClick={() => void importPendingGateTransfer()}>
+                  {pendingTransferSource === "qr" ? <QrCode /> : <Share2 />} Import shared configuration
+                </button>
+              </section>}
               <section className="transfer-group transfer-group--direct">
                 <header><strong>2. Transfer directly</strong><span>Choose one sharing method</span></header>
                 <div className="transfer-methods">
@@ -894,7 +904,6 @@ export function GateControlApp() {
                     <div className="transfer-method-actions">
                       <button type="button" className="secondary-button" disabled={transferBusy || !gates.length} onClick={() => void shareGateByQRCode()}><QrCode /> Share QR</button>
                       <button type="button" className="secondary-button" disabled={transferBusy} onClick={() => { setTransferMessage(""); setQRScannerOpen(true); }}><Camera /> Scan QR</button>
-                      {pendingGateTransferToken && <button type="button" className="primary-button" disabled={transferBusy} onClick={() => void importPendingGateTransfer()}><QrCode /> Finish QR import</button>}
                     </div>
                   </article>
                 </div>
