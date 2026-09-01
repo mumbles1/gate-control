@@ -601,28 +601,39 @@ export function GateControlApp() {
     return true;
   };
 
-  const exportConfiguration = async (share: boolean) => {
-    setTransferBusy(true); setTransferMessage(share ? (preparedShareLink ? "Opening the device Share Sheet…" : "Preparing a temporary clone link…") : "Preparing backup file…");
+  const exportConfiguration = async () => {
+    setTransferBusy(true); setTransferMessage("Preparing backup file…");
     try {
-      if (share && preparedShareLink) {
-        const result = await shareConfigurationLink(preparedShareLink);
-        setPreparedShareLink("");
-        setTransferMessage(result === "shared" ? "Clone link opened in the device Share Sheet." : "Clone link copied. Open it on the new device within 10 minutes.");
-        return;
-      }
       const bundle = makeConfigurationBundle();
       if (!bundle.gates.length) throw new Error(transferScope === "gate" ? "Select a gate to transfer." : "There are no gates to export.");
       const payload = await encryptConfiguration(bundle, "");
-      if (share) {
-        const transfer = await createGateTransfer(payload);
-        if (!transfer.url) throw new Error("The app server did not provide a transfer address.");
-        setPreparedShareLink(transfer.url);
-        setTransferMessage("Clone link prepared. Tap Open Share / AirDrop and send it to the new device within 10 minutes.");
-      } else {
-        downloadConfiguration(payload);
-        setTransferMessage("Backup file saved. Import it from inside Gate Control on the new device.");
-      }
+      downloadConfiguration(payload);
+      setTransferMessage("Backup file saved. Import it from inside Gate Control on the new device.");
     } catch (error) { setTransferMessage(error instanceof Error ? error.message : "Configuration export failed."); }
+    finally { setTransferBusy(false); }
+  };
+
+  const prepareAirDropLink = async () => {
+    setTransferBusy(true); setTransferMessage("Preparing a temporary AirDrop link…");
+    try {
+      const bundle = makeConfigurationBundle();
+      if (!bundle.gates.length) throw new Error(transferScope === "gate" ? "Select a gate to transfer." : "There are no gates to export.");
+      const payload = await encryptConfiguration(bundle, "");
+      const transfer = await createGateTransfer(payload);
+      if (!transfer.url) throw new Error("The app server did not provide a transfer address.");
+      setPreparedShareLink(transfer.url);
+      setTransferMessage("AirDrop link ready. Select Send with AirDrop. The link expires in 10 minutes.");
+    } catch (error) { setTransferMessage(error instanceof Error ? error.message : "Could not prepare the AirDrop link."); }
+    finally { setTransferBusy(false); }
+  };
+
+  const sendWithAirDrop = async () => {
+    if (!preparedShareLink) return;
+    setTransferBusy(true); setTransferMessage("Opening the device Share Sheet…");
+    try {
+      const result = await shareConfigurationLink(preparedShareLink);
+      setTransferMessage(result === "shared" ? "AirDrop Share Sheet opened." : "Clone link copied. Open it on the receiving device within 10 minutes.");
+    } catch (error) { setTransferMessage(error instanceof Error ? error.message : "Could not open AirDrop sharing."); }
     finally { setTransferBusy(false); }
   };
 
@@ -909,20 +920,14 @@ export function GateControlApp() {
                 </div>
               </section>
               {transferMessage && <p className={`transfer-message transfer-message--near ${/failed|cannot|could not|requires|enter|select|timed out|rejected|unavailable/i.test(transferMessage) ? "transfer-message--error" : ""}`} role="status">{transferMessage}</p>}
-              {pendingGateTransferToken && <section className="transfer-group transfer-group--received">
-                <header><strong>Received configuration</strong><span>{pendingTransferSource === "qr" ? "Ready from the scanned QR code" : "Ready from the shared AirDrop link"}</span></header>
-                <button type="button" className="primary-button" disabled={transferBusy} onClick={() => void importPendingGateTransfer()}>
-                  {pendingTransferSource === "qr" ? <QrCode /> : <Share2 />} Import shared configuration
-                </button>
-              </section>}
               <section className="transfer-group transfer-group--direct">
                 <header><strong>2. Transfer directly</strong><span>Choose one sharing method</span></header>
                 <div className="transfer-methods">
                   <article className="transfer-method">
                     <header><span className="transfer-method-icon"><Download /></span><div><strong>Backup file</strong><small>Save a durable copy or import one inside Gate Control</small></div></header>
                     <div className="transfer-method-actions">
-                      <button type="button" className="secondary-button" disabled={transferBusy} onClick={() => void exportConfiguration(false)}><Download /> Save backup</button>
-                      <button type="button" className="secondary-button" disabled={transferBusy} onClick={() => transferFileInput.current?.click()}><Upload /> Import backup</button>
+                      <button type="button" className="secondary-button" disabled={transferBusy} onClick={() => void exportConfiguration()}><Download /> Save backup</button>
+                      <button type="button" className="secondary-button" disabled={transferBusy} onClick={() => transferFileInput.current?.click()}><Upload /> Receive configuration</button>
                     </div>
                     <p className="transfer-method-note">On iPhone, open Gate Control first and select Import backup; tapping a .gateconfig file in Files may not launch the app.</p>
                     <input ref={transferFileInput} className="transfer-file-input" type="file" accept=".gateconfig,application/vnd.turnageautomation.gate-control+json,application/json" onChange={(event) => void importConfigurationFile(event.target.files?.[0])} />
@@ -930,7 +935,9 @@ export function GateControlApp() {
                   <article className="transfer-method">
                     <header><span className="transfer-method-icon"><Share2 /></span><div><strong>AirDrop or device share</strong><small>Send a temporary clone link to another device</small></div></header>
                     <div className="transfer-method-actions">
-                      <button type="button" className={preparedShareLink ? "primary-button" : "secondary-button"} disabled={transferBusy} onClick={() => void exportConfiguration(true)}><Share2 /> {preparedShareLink ? "Open Share / AirDrop" : "Prepare clone link"}</button>
+                      <button type="button" className="secondary-button" disabled={transferBusy} onClick={() => void prepareAirDropLink()}><Share2 /> Prepare AirDrop link</button>
+                      <button type="button" className="secondary-button" disabled={transferBusy || !preparedShareLink} onClick={() => void sendWithAirDrop()}><Send /> Send with AirDrop</button>
+                      {pendingGateTransferToken && pendingTransferSource === "link" && <button type="button" className="primary-button" disabled={transferBusy} onClick={() => void importPendingGateTransfer()}><CloudDownload /> Receive configuration</button>}
                     </div>
                     <p className="transfer-method-note">The recipient opens the link in Gate Control and confirms the import. Links expire after 10 minutes.</p>
                   </article>
@@ -939,6 +946,7 @@ export function GateControlApp() {
                     <div className="transfer-method-actions">
                       <button type="button" className="secondary-button" disabled={transferBusy || !gates.length} onClick={() => void shareGateByQRCode()}><QrCode /> Share QR</button>
                       <button type="button" className="secondary-button" disabled={transferBusy} onClick={() => { setTransferMessage(""); setQRScannerOpen(true); }}><Camera /> Scan QR</button>
+                      {pendingGateTransferToken && pendingTransferSource === "qr" && <button type="button" className="primary-button" disabled={transferBusy} onClick={() => void importPendingGateTransfer()}><CloudDownload /> Receive configuration</button>}
                     </div>
                   </article>
                 </div>
