@@ -115,9 +115,19 @@ export function brokerUrl(broker: BrokerSettings): string {
   return `${scheme}://${formattedHost}${port}${path}`;
 }
 
-/** Default WebSocket route for a property's Cloudflare broker path. */
-export function defaultBrokerBasePath(property: string): string {
-  return property.trim().replace(/^\/+|\/+$/g, "") || "property";
+/** Default Cloudflare hostname for a property-specific broker. */
+export function defaultBrokerHost(property: string): string {
+  const subdomain = property
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "property";
+  return `${subdomain}.turnageautomation.com`;
+}
+
+/** Default Mosquitto WebSocket route exposed by Cloudflare. */
+export function defaultBrokerBasePath(_property?: string): string {
+  return "mqtt";
 }
 
 export function migrateBrokerSettings(broker: BrokerSettings): BrokerSettings {
@@ -206,6 +216,11 @@ export function topicDefaults(property: string, location: string) {
     openTopic: base,
     closeTopic: base,
   };
+}
+
+export function configurationTransferTopic(property?: string): string {
+  const segment = property?.trim().replace(/^\/+|\/+$/g, "") || "Property";
+  return `${segment}/GateControl/Settings`;
 }
 
 /** Turnage Automation controller topics extracted from the installed MQTT contract. */
@@ -317,12 +332,12 @@ export function updateGatePlace(gate: GateConfiguration, key: "property" | "loca
   const oldDefaults = topicDefaults(gate.property, gate.location);
   const next = { ...gate, [key]: value };
   const newDefaults = topicDefaults(next.property, next.location);
-  const oldDefaultBasePath = defaultBrokerBasePath(gate.property);
-  const nextDefaultBasePath = defaultBrokerBasePath(next.property);
-  const currentBasePath = gate.broker.basePath.trim().replace(/^\/+|\/+$/g, "");
-  const broker = key === "property" && currentBasePath === oldDefaultBasePath
+  const oldDefaultHost = defaultBrokerHost(gate.property);
+  const nextDefaultHost = defaultBrokerHost(next.property);
+  const currentHost = gate.broker.host.trim().toLowerCase();
+  const broker = key === "property" && currentHost === oldDefaultHost
     ? (() => {
-        const updated = { ...gate.broker, basePath: nextDefaultBasePath };
+        const updated = { ...gate.broker, host: nextDefaultHost };
         return { ...updated, url: brokerUrl(updated) };
       })()
     : gate.broker;
@@ -349,7 +364,8 @@ export const defaultGate = (order = 0): GateConfiguration => {
   const property = "property";
   const location = `gate-${order + 1}`;
   const topics = topicDefaults(property, location);
-  const basePath = defaultBrokerBasePath(property);
+  const host = defaultBrokerHost(property);
+  const basePath = defaultBrokerBasePath();
   return ({
   id: createId(),
   name: "New gate",
@@ -362,9 +378,9 @@ export const defaultGate = (order = 0): GateConfiguration => {
   graphicTapAction: "pulse",
   homeAssistantDiscoveryEnabled: false,
   broker: {
-    url: `wss://ws.turnageautomation.com:443/${basePath}`,
+    url: `wss://${host}:443/${basePath}`,
     protocol: "wss",
-    host: "ws.turnageautomation.com",
+    host,
     port: 443,
     basePath,
     tls: true,

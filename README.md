@@ -162,7 +162,7 @@ Automatic open and close times use a 12-hour picker in the app and publish the c
 
 Return to **Gates** and confirm that the gate shows **Connected** and reports its current state. Test controls while physically observing the gate and its safety devices.
 
-Gate configuration and credentials remain in that browser's local device storage. Use **App → Configuration transfer** to copy an encrypted configuration to another phone, tablet, or computer. Adding the site to a mobile home screen alone does not synchronize configuration between devices.
+Gate configuration and credentials remain in that browser's local device storage. Use **App → Configuration transfer** to copy a configuration to another phone, tablet, or computer. Adding the site to a mobile home screen alone does not synchronize configuration between devices.
 
 ## PWA installation
 
@@ -186,18 +186,18 @@ Only one notification is sent per outage. The monitor does not publish gate comm
 
 ## Clone configuration to another device
 
-Open **App → Configuration transfer** and enter a transfer passphrase of at least eight characters. The passphrase is used for AES-GCM encryption and is never stored.
+Open **App → Configuration transfer**, choose whether to transfer the full app or one gate, then choose a transfer method.
 
-- **Export file** downloads an encrypted `.gateconfig` file.
+- **Export file** downloads a `.gateconfig` file.
 - **Share / AirDrop** opens the native mobile Share Sheet when supported, allowing AirDrop on Apple devices; unsupported browsers download the file instead.
-- Select **One gate only** and **Share gate QR** to create a 10-minute encrypted handoff. Scan it on the receiving device, open Gate Control, enter the same passphrase, and import the shared gate.
-- **Import file** decrypts the file and replaces the gates and app preferences on that device.
-- **Publish settings** publishes the encrypted bundle to the selected gate broker and configurable MQTT topic with QoS 1. Retain can be enabled or disabled.
-- **Load settings** subscribes to that topic and imports the retained encrypted bundle.
+- Select **One gate only** and **Share QR** to create a 10-minute handoff. Scan it on the receiving device and import the shared gate.
+- **Import file** loads the file and replaces the gates and app preferences on that device.
+- **Publish settings** publishes the bundle to the selected gate broker and configurable MQTT topic with QoS 1. Retain can be enabled or disabled.
+- **Load settings** subscribes to that topic and imports the retained bundle.
 
-The transfer includes gate definitions, MQTT credentials, dashboard preferences, notification contact email, and offline delay. It never transfers the device's Web Push subscription, notification permission, or local notification identity. Restrict the configuration topic with Mosquitto ACLs and use a strong passphrase. When **Retain** is disabled, Gate Control first clears any older retained configuration before publishing the new bundle once.
+The transfer includes gate definitions, MQTT credentials, dashboard preferences, notification contact email, and offline delay. It never transfers the device's Web Push subscription, notification permission, or local notification identity. Transfers are not password protected, so share them only with trusted devices and restrict the configuration topic with Mosquitto ACLs. The default topic is `<Property>/GateControl/Settings`. When **Retain** is disabled, Gate Control first clears any older retained configuration before publishing the new bundle once.
 
-QR codes contain only a random short-lived transfer link. The encrypted gate payload is held in memory by the app server for 10 minutes and is never written to disk. The passphrase is not included in the QR code.
+QR codes contain only a random short-lived transfer link. The gate payload is held in memory by the app server for 10 minutes and is never written to disk.
 
 ## Offline launch behavior
 

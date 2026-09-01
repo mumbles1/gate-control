@@ -79,6 +79,7 @@ async function portableTransferKey(passphrase: string, salt: Uint8Array, iterati
 }
 
 export async function encryptConfiguration(bundle: ConfigurationBundle, passphrase: string): Promise<string> {
+  if (!passphrase) return JSON.stringify(bundle);
   if (passphrase.length < 8) throw new Error("Transfer passphrase must contain at least 8 characters.");
   if (!globalThis.crypto?.getRandomValues) throw new Error("This browser cannot securely create encrypted transfers.");
   const salt = crypto.getRandomValues(new Uint8Array(16));
@@ -100,9 +101,16 @@ export async function encryptConfiguration(bundle: ConfigurationBundle, passphra
 }
 
 export async function decryptConfiguration(value: string, passphrase: string): Promise<ConfigurationBundle> {
-  if (passphrase.length < 8) throw new Error("Enter the transfer passphrase used when the configuration was published or exported.");
   try {
-    const envelope = JSON.parse(value) as EncryptedEnvelope;
+    const decoded = JSON.parse(value) as EncryptedEnvelope | ConfigurationBundle;
+    if (decoded.format === "gate-control-configuration") {
+      const bundle = decoded as ConfigurationBundle;
+      if (bundle.version !== 1 || !Array.isArray(bundle.gates) || bundle.gates.length > 100 || !bundle.settings) throw new Error("Invalid Gate Control configuration.");
+      return bundle;
+    }
+    if (!passphrase) throw new Error("This configuration was created by an older encrypted version and cannot be opened without its original passphrase.");
+    if (passphrase.length < 8) throw new Error("Enter the transfer passphrase used when the configuration was published or exported.");
+    const envelope = decoded as EncryptedEnvelope;
     if (envelope.format !== "gate-control-encrypted-configuration" || envelope.version !== 1 || envelope.kdf !== "PBKDF2-SHA256") throw new Error("Unsupported configuration format.");
     if (!Number.isInteger(envelope.iterations) || envelope.iterations < 100_000 || envelope.iterations > 1_000_000) throw new Error("Invalid encryption settings.");
     const salt = base64ToBytes(envelope.salt);
@@ -135,7 +143,7 @@ export function downloadConfiguration(payload: string) {
 export async function shareConfiguration(payload: string): Promise<"shared" | "downloaded"> {
   const file = new File([payload], `gate-control-${new Date().toISOString().slice(0, 10)}.gateconfig`, { type: "application/json" });
   if (typeof navigator.share === "function" && (!navigator.canShare || navigator.canShare({ files: [file] }))) {
-    await navigator.share({ title: "Gate Control configuration", text: "Encrypted Gate Control configuration", files: [file] });
+    await navigator.share({ title: "Gate Control configuration", text: "Gate Control configuration", files: [file] });
     return "shared";
   }
   downloadConfiguration(payload);

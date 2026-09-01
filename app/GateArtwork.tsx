@@ -8,9 +8,10 @@ interface GateArtworkProps {
   state: GateState;
   large?: boolean;
   onActivate?: () => void;
+  activationLabel?: string;
 }
 
-export function GateArtwork({ style, state, large = false, onActivate }: GateArtworkProps) {
+export function GateArtwork({ style, state, large = false, onActivate, activationLabel }: GateArtworkProps) {
   const previousState = useRef(state);
   const stoppedTransition = useRef<GateState | null>(null);
   if (state !== previousState.current) {
@@ -19,7 +20,7 @@ export function GateArtwork({ style, state, large = false, onActivate }: GateArt
   }
   const fromStopped = stoppedTransition.current === state;
   const usesSwingMotion = style === "swing" || style === "ranch";
-  const label = `${style} gate is ${state}. ${onActivate ? "Activate configured gate action." : ""}`;
+  const label = `${style} gate is ${state}. ${onActivate ? (activationLabel ?? "Activate configured gate action.") : ""}`;
   const content = (
     <span className={`gate-art gate-art--${style} ${usesSwingMotion ? "gate-art--swing-motion" : ""} gate-art--${state} ${fromStopped ? "gate-art--from-stopped" : ""} ${large ? "gate-art--large" : ""}`} aria-hidden="true">
       <span className="gate-scene">
