@@ -115,6 +115,11 @@ export function brokerUrl(broker: BrokerSettings): string {
   return `${scheme}://${formattedHost}${port}${path}`;
 }
 
+/** Default WebSocket route for a property's Cloudflare broker path. */
+export function defaultBrokerBasePath(property: string): string {
+  return property.trim().replace(/^\/+|\/+$/g, "") || "property";
+}
+
 export function migrateBrokerSettings(broker: BrokerSettings): BrokerSettings {
   if (broker.protocol && broker.host && broker.port) {
     const protocol: BrokerProtocol = broker.protocol === "mqtt" ? "mqtt" : broker.tls ? "wss" : "ws";
@@ -312,8 +317,18 @@ export function updateGatePlace(gate: GateConfiguration, key: "property" | "loca
   const oldDefaults = topicDefaults(gate.property, gate.location);
   const next = { ...gate, [key]: value };
   const newDefaults = topicDefaults(next.property, next.location);
+  const oldDefaultBasePath = defaultBrokerBasePath(gate.property);
+  const nextDefaultBasePath = defaultBrokerBasePath(next.property);
+  const currentBasePath = gate.broker.basePath.trim().replace(/^\/+|\/+$/g, "");
+  const broker = key === "property" && currentBasePath === oldDefaultBasePath
+    ? (() => {
+        const updated = { ...gate.broker, basePath: nextDefaultBasePath };
+        return { ...updated, url: brokerUrl(updated) };
+      })()
+    : gate.broker;
   return {
     ...next,
+    broker,
     statusTopic: !gate.homeAssistantDiscoveryEnabled && gate.statusTopic === oldDefaults.statusTopic ? newDefaults.statusTopic : gate.statusTopic,
     availabilityTopic: !gate.homeAssistantDiscoveryEnabled && gate.availabilityTopic === oldDefaults.availabilityTopic ? newDefaults.availabilityTopic : gate.availabilityTopic,
     actions: {
@@ -334,6 +349,7 @@ export const defaultGate = (order = 0): GateConfiguration => {
   const property = "property";
   const location = `gate-${order + 1}`;
   const topics = topicDefaults(property, location);
+  const basePath = defaultBrokerBasePath(property);
   return ({
   id: createId(),
   name: "New gate",
@@ -346,11 +362,11 @@ export const defaultGate = (order = 0): GateConfiguration => {
   graphicTapAction: "pulse",
   homeAssistantDiscoveryEnabled: false,
   broker: {
-    url: "wss://mqtt.example.com/mqtt",
+    url: `wss://ws.turnageautomation.com:443/${basePath}`,
     protocol: "wss",
-    host: "mqtt.example.com",
+    host: "ws.turnageautomation.com",
     port: 443,
-    basePath: "mqtt",
+    basePath,
     tls: true,
     validateCertificate: true,
     username: "",
