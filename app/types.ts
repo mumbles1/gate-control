@@ -209,6 +209,7 @@ export interface GateRuntimeState {
 }
 
 export function displayedGateState(runtime: GateRuntimeState): GateState {
+  if (!runtime.connected) return "unknown";
   return runtime.controllerConnected === false ? "offline" : runtime.state;
 }
 

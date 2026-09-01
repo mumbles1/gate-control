@@ -18,6 +18,15 @@ function installationId(): string {
   return value;
 }
 
+function browserSessionId(): string {
+  const key = "gate-control-browser-session";
+  const existing = sessionStorage.getItem(key);
+  if (existing) return existing;
+  const value = createId().replace(/-/g, "").slice(0, 8);
+  sessionStorage.setItem(key, value);
+  return value;
+}
+
 function poolKey(gate: GateConfiguration): string {
   const broker = migrateBrokerSettings(gate.broker);
   return [
@@ -35,7 +44,7 @@ function connectionOptions(gate: GateConfiguration, suffix: string): IClientOpti
   return {
     username: broker.username || undefined,
     password: broker.password || undefined,
-    clientId: broker.clientId || `gate-control-${installationId()}-${suffix}`,
+    clientId: broker.clientId || `gate-control-${installationId()}-${browserSessionId()}-${suffix}`,
     protocolVersion: broker.protocolVersion,
     keepalive: Math.max(15, broker.keepalive || 30),
     reconnectPeriod: 3_000,
@@ -239,6 +248,29 @@ export function useMQTTManager(gates: GateConfiguration[]) {
       effectClients.clear();
     };
   }, [gates, updateBrokerSignal, updateGate]);
+
+  useEffect(() => {
+    let hiddenAt = document.hidden ? Date.now() : 0;
+    const resumeConnections = () => {
+      if (document.hidden) {
+        hiddenAt = Date.now();
+        return;
+      }
+      const resumedAfterSuspension = hiddenAt > 0 && Date.now() - hiddenAt >= 2_000;
+      hiddenAt = 0;
+      for (const client of clients.current.values()) {
+        if (resumedAfterSuspension || !client.connected) client.reconnect();
+      }
+    };
+    document.addEventListener("visibilitychange", resumeConnections);
+    window.addEventListener("pageshow", resumeConnections);
+    window.addEventListener("online", resumeConnections);
+    return () => {
+      document.removeEventListener("visibilitychange", resumeConnections);
+      window.removeEventListener("pageshow", resumeConnections);
+      window.removeEventListener("online", resumeConnections);
+    };
+  }, []);
 
   const publish = useCallback(async (gate: GateConfiguration, command: GateCommand) => {
     const key = poolKey(gate);
