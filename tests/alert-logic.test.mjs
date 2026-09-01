@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import { advanceControllerClock, binaryValue, controllerClock, controllerDate, controllerReportedOffline, expectedGateState, normalizeSchedule, readJsonPath } from "../server/alert-logic.mjs";
 
 test("reads controller schedule and RTC fields", () => {
@@ -28,4 +29,10 @@ test("detects controller outages with one or two reporting interfaces", () => {
   assert.equal(controllerReportedOffline(false, true), false);
   assert.equal(controllerReportedOffline(true, false), false);
   assert.equal(controllerReportedOffline(undefined, undefined), false);
+});
+
+test("registers gate configuration files with installed supported PWAs", async () => {
+  const manifest = JSON.parse(await readFile(new URL("../public/manifest.webmanifest", import.meta.url), "utf8"));
+  assert.equal(manifest.file_handlers[0].action, "/?configurationFile=1");
+  assert.deepEqual(manifest.file_handlers[0].accept["application/vnd.turnageautomation.gate-control+json"], [".gateconfig"]);
 });

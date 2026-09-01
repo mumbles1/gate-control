@@ -188,7 +188,7 @@ Only one notification is sent per outage. The monitor does not publish gate comm
 
 Open **App → Configuration transfer**, choose whether to transfer the full app or one gate, then choose a transfer method.
 
-- **Export file** downloads a `.gateconfig` file.
+- **Export file** downloads a `.gateconfig` file. On platforms that support PWA file handling, opening that file launches the installed Gate Control app and starts the import automatically. On iPhone, open the installed app and use **App > Configuration transfer > File > Import file**.
 - **Share / AirDrop** opens the native mobile Share Sheet when supported, allowing AirDrop on Apple devices; unsupported browsers download the file instead.
 - Select **One gate only** and **Share QR** to create a 10-minute handoff. Scan it on the receiving device and import the shared gate.
 - **Import file** loads the file and replaces the gates and app preferences on that device.

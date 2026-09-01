@@ -47,6 +47,7 @@ interface EncryptedEnvelope {
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
 const ITERATIONS = 250_000;
+export const CONFIGURATION_FILE_TYPE = "application/vnd.turnageautomation.gate-control+json";
 
 function asArrayBuffer(bytes: Uint8Array): ArrayBuffer {
   return bytes.slice().buffer as ArrayBuffer;
@@ -129,7 +130,7 @@ export async function decryptConfiguration(value: string, passphrase: string): P
 }
 
 export function downloadConfiguration(payload: string) {
-  const blob = new Blob([payload], { type: "application/json" });
+  const blob = new Blob([payload], { type: CONFIGURATION_FILE_TYPE });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
@@ -141,7 +142,7 @@ export function downloadConfiguration(payload: string) {
 }
 
 export async function shareConfiguration(payload: string): Promise<"shared" | "downloaded"> {
-  const file = new File([payload], `gate-control-${new Date().toISOString().slice(0, 10)}.gateconfig`, { type: "application/json" });
+  const file = new File([payload], `gate-control-${new Date().toISOString().slice(0, 10)}.gateconfig`, { type: CONFIGURATION_FILE_TYPE });
   if (typeof navigator.share === "function" && (!navigator.canShare || navigator.canShare({ files: [file] }))) {
     await navigator.share({ title: "Gate Control configuration", text: "Gate Control configuration", files: [file] });
     return "shared";

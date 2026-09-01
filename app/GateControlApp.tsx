@@ -26,6 +26,14 @@ type Screen =
   | { name: "detail"; gateId: string }
   | { name: "editor"; gate: GateConfiguration; cloneDraft?: boolean; advanced?: boolean };
 
+declare global {
+  interface Window {
+    launchQueue?: {
+      setConsumer: (consumer: (params: { files: Array<{ getFile: () => Promise<File> }> }) => void | Promise<void>) => void;
+    };
+  }
+}
+
 const stateLabels: Record<GateState, string> = {
   open: "Open",
   closed: "Closed",
@@ -359,11 +367,32 @@ export function GateControlApp() {
 
   useEffect(() => {
     if (!loaded) return;
-    const token = new URLSearchParams(window.location.search).get("gateTransfer");
+    const search = new URLSearchParams(window.location.search);
+    const token = search.get("gateTransfer");
+    if (search.has("configurationFile")) {
+      setTransferMessage("Gate Control opened for a configuration file. If it does not load automatically, select Import file below.");
+      setScreen({ name: "appSettings" });
+    }
     if (!token) return;
     setPendingGateTransferToken(token);
     setTransferMessage("A shared configuration is ready. Select Import shared configuration to continue.");
     setScreen({ name: "appSettings" });
+  }, [loaded]);
+
+  useEffect(() => {
+    if (!loaded || !window.launchQueue) return;
+    window.launchQueue.setConsumer(async ({ files }) => {
+      const handle = files[0];
+      if (!handle) return;
+      setScreen({ name: "appSettings" });
+      setTransferMessage("Opening configuration file…");
+      try {
+        await importConfigurationFile(await handle.getFile());
+        window.history.replaceState({}, "", `${window.location.pathname}${window.location.hash}`);
+      } catch {
+        setTransferMessage("The configuration file could not be opened. Select Import file and choose it manually.");
+      }
+    });
   }, [loaded]);
 
   useEffect(() => { if (loaded) void gateStorage.saveGates(gates); }, [gates, loaded]);
@@ -625,7 +654,7 @@ export function GateControlApp() {
 
   const importConfigurationFile = async (file: File | undefined) => {
     if (!file) return;
-    setTransferBusy(true); setTransferMessage("Decrypting configuration file…");
+    setTransferBusy(true); setTransferMessage("Installing configuration from file…");
     try {
       const bundle = await decryptConfiguration(await file.text(), "");
       if (applyConfigurationBundle(bundle)) setTransferMessage("Configuration imported. Notification permission remains specific to this device.");
@@ -855,7 +884,7 @@ export function GateControlApp() {
                       <button type="button" className="secondary-button" disabled={transferBusy} onClick={() => void exportConfiguration(false)}><Download /> Export file</button>
                       <button type="button" className="secondary-button" disabled={transferBusy} onClick={() => transferFileInput.current?.click()}><Upload /> Import file</button>
                     </div>
-                    <input ref={transferFileInput} className="transfer-file-input" type="file" accept=".gateconfig,application/json" onChange={(event) => void importConfigurationFile(event.target.files?.[0])} />
+                    <input ref={transferFileInput} className="transfer-file-input" type="file" accept=".gateconfig,application/vnd.turnageautomation.gate-control+json,application/json" onChange={(event) => void importConfigurationFile(event.target.files?.[0])} />
                   </article>
                   <article className="transfer-method">
                     <header><span className="transfer-method-icon"><Share2 /></span><div><strong>AirDrop or device share</strong><small>Open the device Share Sheet</small></div></header>
