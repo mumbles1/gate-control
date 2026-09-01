@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { advanceControllerClock, binaryValue, controllerClock, controllerDate, expectedGateState, normalizeSchedule, readJsonPath } from "../server/alert-logic.mjs";
+import { advanceControllerClock, binaryValue, controllerClock, controllerDate, controllerReportedOffline, expectedGateState, normalizeSchedule, readJsonPath } from "../server/alert-logic.mjs";
 
 test("reads controller schedule and RTC fields", () => {
   const auto = '{"Open":"19:56","Close":"20:51","Status":1}';
@@ -19,4 +19,13 @@ test("uses the established movement mapping for scheduled outcomes", () => {
   assert.equal(expectedGateState("open", 11, true), false);
   assert.equal(binaryValue("1"), true);
   assert.equal(binaryValue(0), false);
+});
+
+test("detects controller outages with one or two reporting interfaces", () => {
+  assert.equal(controllerReportedOffline(false, undefined), true);
+  assert.equal(controllerReportedOffline(undefined, false), true);
+  assert.equal(controllerReportedOffline(false, false), true);
+  assert.equal(controllerReportedOffline(false, true), false);
+  assert.equal(controllerReportedOffline(true, false), false);
+  assert.equal(controllerReportedOffline(undefined, undefined), false);
 });

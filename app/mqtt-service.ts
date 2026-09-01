@@ -64,7 +64,8 @@ export function useMQTTManager(gates: GateConfiguration[]) {
     const signals = { ...(brokerSignals.current.get(id) ?? {}), [channel]: online };
     brokerSignals.current.set(id, signals);
     const controllerOnline = signals.ethernet === true || signals.wifi === true;
-    const controllerOffline = signals.ethernet === false && signals.wifi === false;
+    const controllerOffline = (signals.ethernet === false || signals.wifi === false)
+      && signals.ethernet !== true && signals.wifi !== true;
     setRuntime((current) => {
       const previous = current[id] ?? offlineRuntime();
       const connected = controllerOnline ? true : controllerOffline ? false : previous.connected;
@@ -75,7 +76,7 @@ export function useMQTTManager(gates: GateConfiguration[]) {
           connected,
           state: connected ? (previous.state === "offline" ? "unknown" : previous.state) : "offline",
           lastMessageAt: at,
-          error: controllerOffline ? "Controller reports Ethernet and Wi-Fi offline" : connected ? undefined : previous.error,
+          error: controllerOffline ? "Controller reports no active Ethernet or Wi-Fi connection" : connected ? undefined : previous.error,
         },
       };
     });

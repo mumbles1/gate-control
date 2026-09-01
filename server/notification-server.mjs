@@ -4,7 +4,7 @@ import { mkdir, readFile, writeFile, chmod } from "node:fs/promises";
 import path from "node:path";
 import mqtt from "mqtt";
 import webpush from "web-push";
-import { advanceControllerClock, binaryValue, controllerClock, controllerDate, expectedGateState, normalizeSchedule, readJsonPath } from "./alert-logic.mjs";
+import { advanceControllerClock, binaryValue, controllerClock, controllerDate, controllerReportedOffline, expectedGateState, normalizeSchedule, readJsonPath } from "./alert-logic.mjs";
 
 const PORT = Number(process.env.ALERT_MONITOR_PORT || 3001);
 const DATA_DIR = process.env.ALERT_DATA_DIR || (process.platform === "win32" ? path.join(process.cwd(), ".alert-data") : "/data");
@@ -194,7 +194,7 @@ function startGateMonitor(deviceId, gate) {
   const timer = setInterval(async () => {
     const device = state.devices[deviceId];
     if (!device) return;
-    const controllerOffline = live.ethernet === false && live.wifi === false;
+    const controllerOffline = controllerReportedOffline(live.ethernet, live.wifi);
     if (controllerOffline) {
       if (!live.controllerOfflineSince) live.controllerOfflineSince = Date.now();
     } else live.controllerOfflineSince = 0;
@@ -207,7 +207,7 @@ function startGateMonitor(deviceId, gate) {
       await saveState();
       await sendOfflineAlert(deviceId, gate, brokerOutage
         ? `The MQTT broker for ${gate.name} has been unreachable for at least 60 seconds.`
-        : `${gate.name} reports both Ethernet and Wi-Fi offline (LWT 0) for ${controllerOfflineDelay} seconds.`);
+        : `${gate.name} reports no active controller network connection (LWT 0 with no Ethernet or Wi-Fi online report) for ${controllerOfflineDelay} seconds.`);
     }
     const explicitlyOnline = live.ethernet === true || live.wifi === true;
     const connectedWithoutOfflineReport = live.connected && live.connectedAt && Date.now() - live.connectedAt >= 15_000 && !controllerOffline;

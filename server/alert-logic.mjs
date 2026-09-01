@@ -62,3 +62,9 @@ export function binaryValue(value) {
   if (value === 0 || value === "0" || value === false) return false;
   return undefined;
 }
+
+export function controllerReportedOffline(ethernet, wifi) {
+  const hasOfflineReport = ethernet === false || wifi === false;
+  const hasOnlineReport = ethernet === true || wifi === true;
+  return hasOfflineReport && !hasOnlineReport;
+}

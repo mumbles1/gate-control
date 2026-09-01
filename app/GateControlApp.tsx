@@ -828,11 +828,11 @@ export function GateControlApp() {
             <div className="section-copy"><span className="section-icon"><Bell /></span><div><h2>Gate notifications</h2><p>Notify this device about failed automatic schedules, controller Ethernet/Wi-Fi outages, and unreachable MQTT brokers.</p></div></div>
             <div className="notification-controls">
               <label className="notification-email"><span>Push service contact email <small>optional</small></span><input type="email" autoComplete="email" placeholder="Enter contact email" value={notificationContactEmail} onChange={(event) => setNotificationContactEmail(event.target.value)} /></label>
-              <label className="notification-delay"><span>Controller offline delay</span><span className="notification-delay-input"><input type="number" inputMode="numeric" min="15" max="3600" step="5" value={controllerOfflineDelay} onChange={(event) => setControllerOfflineDelay(event.target.value.replace(/\D/g, ""))} onBlur={() => { const value = Number(controllerOfflineDelay); setControllerOfflineDelay(String(Math.min(3600, Math.max(15, Number.isFinite(value) && value ? Math.round(value) : 15)))); }} /><small>seconds</small></span><small>Both Ethernet and Wi-Fi must remain LWT 0 for this long before an alert.</small></label>
+              <label className="notification-delay"><span>Controller offline delay</span><span className="notification-delay-input"><input type="number" inputMode="numeric" min="15" max="3600" step="5" value={controllerOfflineDelay} onChange={(event) => setControllerOfflineDelay(event.target.value.replace(/\D/g, ""))} onBlur={() => { const value = Number(controllerOfflineDelay); setControllerOfflineDelay(String(Math.min(3600, Math.max(15, Number.isFinite(value) && value ? Math.round(value) : 15)))); }} /><small>seconds</small></span><small>An LWT 0 with no Ethernet or Wi-Fi online report must remain for this long before an alert.</small></label>
               <button type="button" role="switch" aria-checked={scheduleAlertsEnabled && alertState === "enabled"} className={`controller-switch notification-switch ${scheduleAlertsEnabled && alertState === "enabled" ? "controller-switch--on" : ""}`} disabled={alertBusy || alertState === "unsupported"} onClick={() => void toggleScheduleAlerts()}><span><strong>{scheduleAlertsEnabled ? "Alerts enabled" : "Alerts disabled"}</strong><small>{alertState === "unsupported" ? "Requires HTTPS and an installed Home Screen app on iPhone" : alertState === "denied" ? "Permission blocked in device settings" : "Monitored by the notification service"}</small></span><i /></button>
               {scheduleAlertsEnabled && alertState === "enabled" && <button type="button" className="secondary-button notification-test" disabled={alertBusy} onClick={() => void sendTestScheduleAlert()}><Send /> Test alert</button>}
               {alertMessage && <p className="notification-message" role="status">{alertMessage}</p>}
-              <p className="notification-note">The optional email identifies your Web Push service to browser providers; alerts still arrive as device notifications, not email. A schedule alert waits 90 seconds for the expected state. The dual-LWT delay is configurable above; broker-unreachable alerts wait 60 seconds. One alert is sent per outage. The monitor never moves the gate. On iPhone, open the HTTPS site from its Home Screen icon before enabling.</p>
+              <p className="notification-note">The optional email identifies your Web Push service to browser providers; alerts still arrive as device notifications, not email. A schedule alert waits 90 seconds for the expected state. The controller-offline delay is configurable above and supports Ethernet-only, Wi-Fi-only, or dual-interface controllers; broker-unreachable alerts wait 60 seconds. One alert is sent per outage. The monitor never moves the gate. On iPhone, open the HTTPS site from its Home Screen icon before enabling.</p>
             </div>
           </section>
           <section className="settings-section transfer-settings">
@@ -847,16 +847,31 @@ export function GateControlApp() {
               </section>
               {transferMessage && <p className={`transfer-message transfer-message--near ${/failed|cannot|could not|requires|enter|select|timed out|rejected|unavailable/i.test(transferMessage) ? "transfer-message--error" : ""}`} role="status">{transferMessage}</p>}
               <section className="transfer-group transfer-group--direct">
-                <header><strong>2. File, AirDrop, or QR</strong><span>Share directly between devices</span></header>
-              <div className="transfer-file-actions">
-                <button type="button" className="secondary-button" disabled={transferBusy} onClick={() => void exportConfiguration(false)}><Download /> Export file</button>
-                <button type="button" className={preparedSharePayload ? "primary-button" : "secondary-button"} disabled={transferBusy} onClick={() => void exportConfiguration(true)}><Share2 /> {preparedSharePayload ? "Open Share / AirDrop" : "Prepare Share / AirDrop"}</button>
-                <button type="button" className="secondary-button" disabled={transferBusy || !gates.length} onClick={() => void shareGateByQRCode()}><QrCode /> Share QR</button>
-                <button type="button" className="secondary-button" disabled={transferBusy} onClick={() => { setTransferMessage(""); setQRScannerOpen(true); }}><Camera /> Scan QR</button>
-                <button type="button" className="secondary-button" disabled={transferBusy} onClick={() => transferFileInput.current?.click()}><Upload /> Import file</button>
-                <input ref={transferFileInput} className="transfer-file-input" type="file" accept=".gateconfig,application/json" onChange={(event) => void importConfigurationFile(event.target.files?.[0])} />
-              </div>
-              {pendingGateTransferToken && <button type="button" className="primary-button transfer-import-qr" disabled={transferBusy} onClick={() => void importPendingGateTransfer()}><QrCode /> Import shared configuration</button>}
+                <header><strong>2. Transfer directly</strong><span>Choose one sharing method</span></header>
+                <div className="transfer-methods">
+                  <article className="transfer-method">
+                    <header><span className="transfer-method-icon"><Download /></span><div><strong>File</strong><small>Save a copy or load one from this device</small></div></header>
+                    <div className="transfer-method-actions">
+                      <button type="button" className="secondary-button" disabled={transferBusy} onClick={() => void exportConfiguration(false)}><Download /> Export file</button>
+                      <button type="button" className="secondary-button" disabled={transferBusy} onClick={() => transferFileInput.current?.click()}><Upload /> Import file</button>
+                    </div>
+                    <input ref={transferFileInput} className="transfer-file-input" type="file" accept=".gateconfig,application/json" onChange={(event) => void importConfigurationFile(event.target.files?.[0])} />
+                  </article>
+                  <article className="transfer-method">
+                    <header><span className="transfer-method-icon"><Share2 /></span><div><strong>AirDrop or device share</strong><small>Open the device Share Sheet</small></div></header>
+                    <div className="transfer-method-actions">
+                      <button type="button" className={preparedSharePayload ? "primary-button" : "secondary-button"} disabled={transferBusy} onClick={() => void exportConfiguration(true)}><Share2 /> {preparedSharePayload ? "Open Share / AirDrop" : "Prepare Share / AirDrop"}</button>
+                    </div>
+                  </article>
+                  <article className="transfer-method">
+                    <header><span className="transfer-method-icon"><QrCode /></span><div><strong>QR code</strong><small>Share or scan one gate</small></div></header>
+                    <div className="transfer-method-actions">
+                      <button type="button" className="secondary-button" disabled={transferBusy || !gates.length} onClick={() => void shareGateByQRCode()}><QrCode /> Share QR</button>
+                      <button type="button" className="secondary-button" disabled={transferBusy} onClick={() => { setTransferMessage(""); setQRScannerOpen(true); }}><Camera /> Scan QR</button>
+                      {pendingGateTransferToken && <button type="button" className="primary-button" disabled={transferBusy} onClick={() => void importPendingGateTransfer()}><QrCode /> Finish QR import</button>}
+                    </div>
+                  </article>
+                </div>
               </section>
               <section className="transfer-group transfer-group--mqtt">
                 <header><strong>3. MQTT transfer</strong><span>Publish or load a configuration</span></header>
