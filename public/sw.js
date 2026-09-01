@@ -1,4 +1,4 @@
-const CACHE = "gate-control-v23";
+const CACHE = "gate-control-v24";
 const SHELL = ["/", "/offline.html", "/manifest.webmanifest", "/gate-icon.svg", "/icon-192.png", "/icon-512.png", "/apple-touch-icon.png"];
 
 async function fetchWithTimeout(request, milliseconds) {
