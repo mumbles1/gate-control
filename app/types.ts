@@ -219,8 +219,8 @@ export function topicDefaults(property: string, location: string) {
 }
 
 export function configurationTransferTopic(property?: string): string {
-  const segment = property?.trim().replace(/^\/+|\/+$/g, "") || "Property";
-  return `${segment}/GateControl/Settings`;
+  const propertySegment = property?.trim().replace(/^\/+|\/+$/g, "");
+  return propertySegment ? `${propertySegment}/GateControl/Settings` : "";
 }
 
 /** Turnage Automation controller topics extracted from the installed MQTT contract. */

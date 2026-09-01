@@ -292,7 +292,7 @@ export function GateControlApp() {
   const [alertMessage, setAlertMessage] = useState("");
   const [notificationContactEmail, setNotificationContactEmail] = useState("");
   const [controllerOfflineDelay, setControllerOfflineDelay] = useState("15");
-  const [mqttTransferTopic, setMQTTTransferTopic] = useState("Property/GateControl/Settings");
+  const [mqttTransferTopic, setMQTTTransferTopic] = useState("");
   const [mqttTransferRetain, setMQTTTransferRetain] = useState(true);
   const [mqttTransferGateId, setMQTTTransferGateId] = useState("");
   const [transferScope, setTransferScope] = useState<"app" | "gate">("app");
@@ -709,6 +709,15 @@ export function GateControlApp() {
 
   const saveGate = (gate: GateConfiguration) => {
     const normalizedGate = migrateGate(gate);
+    const selectedGate = gates.find((item) => item.id === mqttTransferGateId);
+    const currentDefault = configurationTransferTopic(selectedGate?.property);
+    const usesAutomaticTopic = !mqttTransferTopic.trim()
+      || mqttTransferTopic === currentDefault
+      || ["turnageautomation/gatecontrol/settings", "property/gatecontrol/settings"].includes(mqttTransferTopic.toLowerCase());
+    if (!mqttTransferGateId || mqttTransferGateId === normalizedGate.id) {
+      setMQTTTransferGateId(normalizedGate.id);
+      if (usesAutomaticTopic) setMQTTTransferTopic(configurationTransferTopic(normalizedGate.property));
+    }
     setGates((current) => {
       const exists = current.some((item) => item.id === normalizedGate.id);
       return (exists ? current.map((item) => item.id === normalizedGate.id ? normalizedGate : item) : [...current, { ...normalizedGate, order: current.length }]).sort((a, b) => a.order - b.order);
@@ -912,7 +921,7 @@ export function GateControlApp() {
                 <header><strong>3. MQTT transfer</strong><span>Publish or load a configuration</span></header>
               <p className="transfer-mqtt-help">Keep retention enabled so another device can retrieve the published settings later.</p>
               <label><span>Broker connection</span><select value={mqttTransferGateId} disabled={!gates.length || transferBusy} onChange={(event) => selectMQTTTransferGate(event.target.value)}>{gates.length ? gates.map((gate) => <option key={gate.id} value={gate.id}>{gate.name} — {brokerUrl(gate.broker)}</option>) : <option value="">Configure a gate first</option>}</select></label>
-              <label><span>Configuration topic</span><input value={mqttTransferTopic} placeholder="Property/GateControl/Settings" onChange={(event) => setMQTTTransferTopic(event.target.value)} /></label>
+              <label><span>Configuration topic</span><input value={mqttTransferTopic} placeholder="&lt;Property&gt;/GateControl/Settings" onChange={(event) => setMQTTTransferTopic(event.target.value)} /></label>
               <button type="button" role="switch" aria-checked={mqttTransferRetain} className={`controller-switch transfer-retain ${mqttTransferRetain ? "controller-switch--on" : ""}`} onClick={() => setMQTTTransferRetain((current) => !current)}><span><strong>Retain MQTT configuration</strong><small>{mqttTransferRetain ? "New devices can load the latest copy" : "Publish once and clear any older retained copy"}</small></span><i /></button>
               <div className="transfer-mqtt-actions">
                 <button type="button" className="secondary-button" disabled={transferBusy || !gates.length} onClick={() => void publishMQTTConfiguration()}><CloudUpload /> Publish settings</button>
