@@ -77,12 +77,16 @@ function ConnectionBadge({ runtime }: { runtime: GateRuntimeState }) {
   </span>;
 }
 
+function gateControllerIsOffline(runtime: GateRuntimeState): boolean {
+  return runtime.controllerConnected === false || (runtime.connected && runtime.state === "offline");
+}
+
 function displayedGateLabel(runtime: GateRuntimeState): string {
-  return runtime.controllerConnected === false ? "Gate not connected to broker" : stateLabels[displayedGateState(runtime)];
+  return gateControllerIsOffline(runtime) ? "Gate not connected to broker" : stateLabels[displayedGateState(runtime)];
 }
 
 function GateControllerStatusMark({ runtime, state }: { runtime: GateRuntimeState; state: GateState }) {
-  if (runtime.controllerConnected !== false) return <span className={`state-dot state-dot--${state}`} />;
+  if (!gateControllerIsOffline(runtime)) return <span className={`state-dot state-dot--${state}`} />;
   return <span className="controller-offline-path" title="Gate controller is not connected to the MQTT broker" aria-label="Gate controller disconnected from MQTT broker">
     <span className="controller-gate-icon"><GateBrandIcon /></span>
     <ArrowRight />
