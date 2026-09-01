@@ -339,15 +339,7 @@ export function GateControlApp() {
 
   useEffect(() => {
     if (!("serviceWorker" in navigator)) return;
-    let reloading = false;
-    const reloadForUpdate = () => {
-      if (reloading) return;
-      reloading = true;
-      window.location.reload();
-    };
-    navigator.serviceWorker.addEventListener("controllerchange", reloadForUpdate);
-    void navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" }).then((registration) => registration.update()).catch(() => undefined);
-    return () => navigator.serviceWorker.removeEventListener("controllerchange", reloadForUpdate);
+    void navigator.serviceWorker.register(`/sw.js?v=${APP_VERSION}`, { updateViaCache: "none" }).then((registration) => registration.update()).catch(() => undefined);
   }, []);
 
   useEffect(() => {
@@ -472,7 +464,7 @@ export function GateControlApp() {
       const serverInfo = await versionResponse.json() as { version?: string };
       const serverVersion = serverInfo.version;
       let registration = await navigator.serviceWorker.getRegistration();
-      if (!registration) registration = await navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" });
+      if (!registration) registration = await navigator.serviceWorker.register(`/sw.js?v=${APP_VERSION}`, { updateViaCache: "none" });
 
       let foundWorker = registration.installing ?? registration.waiting;
       const updateFound = new Promise<ServiceWorker | null>((resolve) => {
@@ -503,6 +495,7 @@ export function GateControlApp() {
       const waiting = registration.waiting;
       if (waiting) {
         setUpdateMessage("Installing update. Gate Control will reopen automatically…");
+        navigator.serviceWorker.addEventListener("controllerchange", () => window.location.reload(), { once: true });
         waiting.postMessage({ type: "SKIP_WAITING" });
         return;
       }

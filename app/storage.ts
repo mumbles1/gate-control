@@ -48,8 +48,15 @@ export const gateStorage = {
   saveGates: (gates: GateConfiguration[]) => writeValue("gates", gates),
   loadLayout: () => readValue<DashboardLayout>("layout", "cards"),
   saveLayout: (layout: DashboardLayout) => writeValue("layout", layout),
-  loadTheme: () => readValue<ColorTheme>("theme", "system"),
-  saveTheme: (theme: ColorTheme) => writeValue("theme", theme),
+  loadTheme: async () => {
+    const theme = await readValue<ColorTheme>("theme", "system");
+    try { localStorage.setItem("gate-control-theme", theme); } catch { /* storage can be unavailable in private mode */ }
+    return theme;
+  },
+  saveTheme: (theme: ColorTheme) => {
+    try { localStorage.setItem("gate-control-theme", theme); } catch { /* storage can be unavailable in private mode */ }
+    return writeValue("theme", theme);
+  },
   loadDisplayMode: () => readValue<GateDisplayMode>("displayMode", "all"),
   saveDisplayMode: (mode: GateDisplayMode) => writeValue("displayMode", mode),
   loadDefaultProperty: () => readValue<string>("defaultProperty", ""),
