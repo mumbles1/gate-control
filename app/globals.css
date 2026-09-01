@@ -40,6 +40,7 @@ h1 { font-size: clamp(2rem, 5vw, 3.6rem); letter-spacing: -.055em; line-height: 
 h2 { letter-spacing: -.035em; }
 
 .dashboard-header, .topbar, .editor-header {
+  position: sticky; top: 0; z-index: 35; background: var(--paper);
   min-height: 72px; display: flex; align-items: center; justify-content: space-between; gap: 20px;
   border-bottom: 1px solid var(--line); padding-bottom: 18px;
 }
@@ -308,6 +309,7 @@ h2 { letter-spacing: -.035em; }
 
 @media (max-width: 760px) {
   .dashboard-page, .setup-page, .detail-page, .editor-shell { padding: calc(17px + env(safe-area-inset-top)) 15px 70px; }
+  .dashboard-header, .topbar, .editor-header { top: env(safe-area-inset-top); }
   .dashboard-header { min-height: 60px; }.brand div > span { display: none; }.fleet-status { padding: 7px 10px; }.settings-shortcut { display: none; }
   .dashboard-intro { display: block; margin: 36px 2px 22px; }.dashboard-intro > p { margin: 12px 0 0; font-size: .8rem; }
   .dashboard-sort-controls { justify-content: stretch; margin-top: 18px; }.dashboard-sort-controls label { flex: 1; }.dashboard-sort-controls select { width: 100%; min-width: 0; }
