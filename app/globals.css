@@ -69,6 +69,7 @@ h2 { letter-spacing: -.035em; }
 .app-nav button { min-width: 108px; border: 0; border-radius: 12px; background: transparent; color: #b9c4c8; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 15px; font-weight: 700; font-size: .8rem; }
 .app-nav button.active { background: var(--accent); color: var(--navy); }
 .app-nav svg { width: 18px; }
+.nav-gate-icon { width: 18px; height: 18px; display: inline-grid; place-items: center; overflow: hidden; border-radius: 4px; }
 
 .gate-collection { display: grid; gap: 18px; }
 .gate-collection--cards { grid-template-columns: repeat(auto-fit, minmax(310px, 1fr)); }
@@ -339,7 +340,7 @@ h2 { letter-spacing: -.035em; }
   .editor-header { display: grid; grid-template-columns: 44px 1fr; }.editor-header .save-button { grid-column: 1 / -1; width: 100%; }.form-card, .advanced-live-card { padding: 18px 15px; }.form-grid--two { grid-template-columns: 1fr; }.field--wide { grid-column: auto; }
   .advanced-topic-heading { grid-template-columns: 32px 1fr; }.advanced-topic-actions { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; }.advanced-topic-heading .secondary-button { width: 100%; }.advanced-topic-row { grid-template-columns: 1fr 1fr; }.advanced-topic-path, .advanced-topic-payload { grid-column: 1 / -1; }.advanced-topic-delete { justify-self: end; grid-column: 2; }
   .command-row { grid-template-columns: 72px 1fr; }.command-row input:last-child { grid-column: 2; }.command-row--heading span:last-child { display: none; }
-  .test-panel { grid-template-columns: 1fr; }.test-panel button, .test-result { grid-column: 1; }.app-nav { bottom: 0; width: 100%; padding: 6px calc(16px + env(safe-area-inset-right)) calc(10px + env(safe-area-inset-bottom)) calc(16px + env(safe-area-inset-left)); border-radius: 0; }.app-nav button { flex: 1; min-width: 0; padding: 8px 5px; gap: 4px; border-radius: 9px; font-size: .72rem; }.app-nav svg { width: 15px; }
+  .test-panel { grid-template-columns: 1fr; }.test-panel button, .test-result { grid-column: 1; }.app-nav { bottom: 0; width: 100%; padding: 6px calc(16px + env(safe-area-inset-right)) calc(10px + env(safe-area-inset-bottom)) calc(16px + env(safe-area-inset-left)); border-radius: 0; }.app-nav button { flex: 1; min-width: 0; padding: 8px 5px; gap: 4px; border-radius: 9px; font-size: .72rem; }.app-nav svg { width: 15px; }.nav-gate-icon { width: 15px; height: 15px; }
   .topic-defaults { align-items: start; flex-direction: column; }.topic-defaults .secondary-button { width: 100%; }
   .broker-preview { align-items: start; flex-direction: column; gap: 5px; }
   .empty-art { transform: scale(.9); margin: -12px 0 -4px; }.empty-dashboard { min-height: 440px; }

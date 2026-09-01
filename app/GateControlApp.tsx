@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle, ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Bell, CalendarDays, Camera, ChevronRight, CircleDot, CircleSlash2, Clock3, CloudDownload, CloudUpload, Copy, Download, QrCode, RefreshCw, Send, Share2, Smartphone, Square,
-  Gauge, LayoutGrid, List, Menu, Monitor, Moon, Plus, Radio, Settings, SlidersHorizontal, Upload,
+  LayoutGrid, List, Menu, Monitor, Moon, Plus, Radio, Settings, SlidersHorizontal, Upload,
   Sun, Trash2, Wifi, WifiOff, X,
 } from "lucide-react";
 import { GateArtwork } from "./GateArtwork";
@@ -289,7 +289,7 @@ function AutoTimerCard({ gate, runtime, onPublish }: { gate: GateConfiguration; 
 function AppNav({ screen, onDashboard, onSetup, onAppSettings }: { screen: Screen; onDashboard: () => void; onSetup: () => void; onAppSettings: () => void }) {
   return (
     <nav className="app-nav" aria-label="Primary navigation">
-      <button className={screen.name === "dashboard" || screen.name === "detail" ? "active" : ""} onClick={onDashboard}><Gauge /><span>Gates</span></button>
+      <button className={screen.name === "dashboard" || screen.name === "detail" ? "active" : ""} onClick={onDashboard}><span className="nav-gate-icon"><GateBrandIcon /></span><span>Gates</span></button>
       <button className={screen.name === "setup" || screen.name === "editor" ? "active" : ""} onClick={onSetup}><SlidersHorizontal /><span>Gate setup</span></button>
       <button className={screen.name === "appSettings" ? "active" : ""} onClick={onAppSettings}><Settings /><span>App</span></button>
     </nav>
