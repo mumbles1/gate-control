@@ -110,6 +110,7 @@ h2 { letter-spacing: -.035em; }
 .mosquitto-logo { display: block; width: 15px; height: 15px; object-fit: contain; }.connection-path-icons { display: inline-flex; align-items: center; gap: 2px; }.connection-path-icons svg:nth-child(2) { width: 9px; opacity: .72; }.connection-path-icons .mosquitto-logo { width: 12px; height: 12px; }
 .connection-badge--online { background: #eef7d1; color: #60770a; }
 .connection-badge--offline { background: #f1f2f1; color: #707a7f; }
+.connection-badge--demo { background: #fff2ca; color: #7b5a00; }
 .connection-error { width: fit-content; max-width: 100%; display: flex; align-items: center; gap: 7px; margin-top: 9px; padding: 8px 10px; border: 1px solid rgba(184,74,61,.34); border-radius: 9px; background: rgba(184,74,61,.08); color: #b84a3d; font-size: .68rem; font-weight: 750; line-height: 1.4; }.connection-error svg { width: 15px; flex: 0 0 auto; }
 
 /* CSS-only gate artwork */
@@ -164,6 +165,8 @@ h2 { letter-spacing: -.035em; }
 .empty-dashboard { min-height: 460px; padding: 55px 25px; text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 1px dashed #cbd0c8; border-radius: 28px; background: rgba(255,255,255,.55); overflow: hidden; }
 .empty-dashboard h2 { margin: 2px 0 10px; font-size: 2rem; }
 .empty-dashboard > p:not(.eyebrow) { max-width: 570px; color: var(--ink-soft); line-height: 1.55; }
+.empty-dashboard-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 9px; }
+.demo-gate-button { border-color: #d7a72d; }
 .empty-art { display: flex; width: 620px; max-width: 100%; margin-bottom: 10px; }
 .empty-art > span { width: 33%; margin: 0 -1%; transform: scale(.82); opacity: .75; }
 .primary-button, .secondary-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; border-radius: 12px; padding: 10px 16px; font-weight: 800; cursor: pointer; }
@@ -398,6 +401,7 @@ h2 { letter-spacing: -.035em; }
 :root[data-theme="dark"] .switch-field,
 :root[data-theme="dark"] .broker-preview { background: #1a2b33; }
 :root[data-theme="dark"] .connection-badge--offline { background: #24333a; color: #c2ccd0; }
+:root[data-theme="dark"] .connection-badge--demo { background: #403616; color: #f5d978; }
 :root[data-theme="dark"] .settings-section input:not([type="checkbox"]),
 :root[data-theme="dark"] .settings-section select,
 :root[data-theme="dark"] .transfer-group { background: #102028; border-color: #3a4d56; color: var(--ink); }
@@ -438,6 +442,7 @@ h2 { letter-spacing: -.035em; }
   :root[data-theme="system"] .switch-field,
   :root[data-theme="system"] .broker-preview { background: #1a2b33; }
   :root[data-theme="system"] .connection-badge--offline { background: #24333a; color: #c2ccd0; }
+  :root[data-theme="system"] .connection-badge--demo { background: #403616; color: #f5d978; }
   :root[data-theme="system"] .settings-section input:not([type="checkbox"]),
   :root[data-theme="system"] .settings-section select,
   :root[data-theme="system"] .transfer-group { background: #102028; border-color: #3a4d56; color: var(--ink); }

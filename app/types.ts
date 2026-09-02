@@ -171,6 +171,8 @@ export function migrateBrokerSettings(broker: BrokerSettings): BrokerSettings {
 
 export interface GateConfiguration {
   id: string;
+  /** Local-only demonstration gate. It never opens an MQTT connection. */
+  simulated?: boolean;
   name: string;
   property: string;
   propertyAlias: string;
@@ -421,6 +423,20 @@ export const defaultGate = (order = 0): GateConfiguration => {
   });
 };
 
+export const defaultSimulatedGate = (order = 0): GateConfiguration => {
+  const gate = defaultGate(order);
+  return {
+    ...gate,
+    simulated: true,
+    name: "Demo gate",
+    property: "Demo Property",
+    propertyAlias: "",
+    location: "Main Entrance",
+    locationAlias: "",
+    advancedTopics: gate.advancedTopics.filter((entry) => entry.name === "Stop command"),
+  };
+};
+
 const normalizeTopic = (value: string) => value.trim().replace(/^\/+|\/+$/g, "");
 
 export function endpointIdentity(gate: GateConfiguration): string {
@@ -446,6 +462,7 @@ export function validateGate(gate: GateConfiguration, existing: GateConfiguratio
   if (!gate.name.trim()) errors.push("Gate name is required.");
   if (!gate.property.trim()) errors.push("Property is required.");
   if (!gate.location.trim()) errors.push("Location is required.");
+  if (gate.simulated) return errors;
   try {
     if (!Number.isInteger(gate.broker.port) || gate.broker.port < 1 || gate.broker.port > 65535) errors.push("Broker port must be between 1 and 65535.");
     const broker = migrateBrokerSettings(gate.broker);

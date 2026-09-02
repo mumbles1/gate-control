@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ArrowLeft, CheckCircle2, Clock3, Copy, Eye, EyeOff, Plus, Radio, Save, Send, ShieldAlert, Trash2, X } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Clock3, Copy, Eye, EyeOff, FlaskConical, Plus, Radio, Save, Send, ShieldAlert, Trash2, X } from "lucide-react";
 import { testGateConnection } from "./mqtt-service";
 import type { AdditionalMQTTTopic, BrokerProtocol, GateCommand, GateConfiguration, GateRuntimeState } from "./types";
 import { brokerUrl, cloneData, controllerTopicDefaults, createId, defaultBrokerPort, jogMacroDefinition, readBinaryPayload, schedulePayload, topicDefaults, updateGatePlace, validateGate } from "./types";
@@ -28,6 +28,7 @@ export function GateEditor({ initial, existing, cloneDraft, advanced = false, ru
   const [publishingSchedule, setPublishingSchedule] = useState(false);
   const [scheduleResult, setScheduleResult] = useState<string | null>(null);
   const errors = useMemo(() => validateGate(gate, existing), [gate, existing]);
+  const showAdvanced = advanced && !gate.simulated;
 
   const setBroker = (key: keyof GateConfiguration["broker"], value: string | number) => {
     setGate((current) => ({ ...current, broker: { ...current.broker, [key]: value } }));
@@ -213,11 +214,12 @@ export function GateEditor({ initial, existing, cloneDraft, advanced = false, ru
     <main className="editor-shell">
       <header className="editor-header">
         <button className="icon-button" type="button" onClick={onCancel} aria-label="Cancel editing"><ArrowLeft /></button>
-        <div><p className="eyebrow">{advanced ? "Advanced setup" : "Gate setup"}</p><h1>{advanced ? "Advanced gate settings" : cloneDraft ? "Clone gate" : initial.name === "New gate" ? "Add a gate" : "Edit gate"}</h1></div>
+        <div><p className="eyebrow">{showAdvanced ? "Advanced setup" : gate.simulated ? "Demo gate" : "Gate setup"}</p><h1>{showAdvanced ? "Advanced gate settings" : gate.simulated ? (existing.some((item) => item.id === initial.id) ? "Edit simulated gate" : "Add simulated gate") : cloneDraft ? "Clone gate" : initial.name === "New gate" ? "Add a gate" : "Edit gate"}</h1></div>
         <button className="primary-button save-button" type="button" disabled={errors.length > 0} onClick={() => onSave(gate)}><Save /> Save</button>
       </header>
 
       {cloneDraft && <div className="notice notice--warning"><Copy /><span>This copy cannot be saved until every topic is unique from the original gate.</span></div>}
+      {gate.simulated && <div className="notice notice--warning"><FlaskConical /><span>This gate uses the real Gate Control screens and animations with a local simulator. It never connects or publishes to MQTT.</span></div>}
 
       <div className="editor-grid">
         <section className="form-card">
@@ -225,15 +227,15 @@ export function GateEditor({ initial, existing, cloneDraft, advanced = false, ru
           <div className="form-grid form-grid--two">
             <label className="field"><span>Gate name</span><input value={gate.name} onChange={(event) => setGate({ ...gate, name: event.target.value })} /></label>
             <label className="field"><span>Animation style</span><select value={gate.visualStyle} onChange={(event) => setGate({ ...gate, visualStyle: event.target.value as GateConfiguration["visualStyle"] })}><option value="sliding">Sliding gate</option><option value="swing">Swing gate</option><option value="ranch">Ranch pipe swing gate</option><option value="barrier">Barrier arm</option></select></label>
-            <label className="field"><span>Property <em>topic value</em></span><input placeholder="main-campus" value={gate.property} onChange={(event) => setPlace("property", event.target.value)} /></label>
-            <label className="field"><span>Location <em>topic value</em></span><input placeholder="north-entrance" value={gate.location} onChange={(event) => setPlace("location", event.target.value)} /></label>
-            <label className="field"><span>Property alias <em>optional</em></span><input placeholder="Main Campus" value={gate.propertyAlias} onChange={(event) => setGate({ ...gate, propertyAlias: event.target.value })} /><small>Shown in property dropdowns; MQTT topics keep the topic value above.</small></label>
-            <label className="field"><span>Location alias <em>optional</em></span><input placeholder="North Entrance" value={gate.locationAlias} onChange={(event) => setGate({ ...gate, locationAlias: event.target.value })} /><small>Shown in gate labels; MQTT topics keep the topic value above.</small></label>
-            <label className="field field--wide"><span>Graphic tap action</span><select value={gate.graphicTapAction} onChange={(event) => setGate({ ...gate, graphicTapAction: event.target.value as GateConfiguration["graphicTapAction"] })}><option value="pulse">Pulse</option><option value="toggle">Toggle open / close</option></select><small>Toggle uses the Open and Close topics and payloads configured below.</small></label>
+            <label className="field"><span>Property {!gate.simulated && <em>topic value</em>}</span><input placeholder="main-campus" value={gate.property} onChange={(event) => setPlace("property", event.target.value)} /></label>
+            <label className="field"><span>Location {!gate.simulated && <em>topic value</em>}</span><input placeholder="north-entrance" value={gate.location} onChange={(event) => setPlace("location", event.target.value)} /></label>
+            <label className="field"><span>Property alias <em>optional</em></span><input placeholder="Main Campus" value={gate.propertyAlias} onChange={(event) => setGate({ ...gate, propertyAlias: event.target.value })} /><small>{gate.simulated ? "Shown in property dropdowns." : "Shown in property dropdowns; MQTT topics keep the topic value above."}</small></label>
+            <label className="field"><span>Location alias <em>optional</em></span><input placeholder="North Entrance" value={gate.locationAlias} onChange={(event) => setGate({ ...gate, locationAlias: event.target.value })} /><small>{gate.simulated ? "Shown in gate labels." : "Shown in gate labels; MQTT topics keep the topic value above."}</small></label>
+            <label className="field field--wide"><span>Graphic tap action</span><select value={gate.graphicTapAction} onChange={(event) => setGate({ ...gate, graphicTapAction: event.target.value as GateConfiguration["graphicTapAction"] })}><option value="pulse">Pulse</option><option value="toggle">Toggle open / close</option></select><small>{gate.simulated ? "Runs the selected action in the local simulator." : "Toggle uses the Open and Close topics and payloads configured below."}</small></label>
           </div>
         </section>
 
-        <section className="form-card">
+        {!gate.simulated && <section className="form-card">
           <div className="section-heading"><span>02</span><div><h2>MQTT broker</h2><p>Connection address, transport, encryption, and credentials.</p></div></div>
           <div className="form-grid form-grid--two">
             <label className="field"><span>Protocol</span><select value={gate.broker.protocol} onChange={(event) => setBrokerAddress("protocol", event.target.value as BrokerProtocol)}><option value="mqtt">mqtt://</option><option value="ws">ws://</option><option value="wss">wss://</option></select></label>
@@ -252,9 +254,9 @@ export function GateEditor({ initial, existing, cloneDraft, advanced = false, ru
             <label className="field"><span>Client ID override</span><input placeholder="Auto-generated" value={gate.broker.clientId} onChange={(event) => setBroker("clientId", event.target.value)} /></label>
           </div>
           <div className="credential-note"><ShieldAlert /><span>Credentials stay in this browser’s local database. Use a broker account restricted to only this gate’s topics.</span></div>
-        </section>
+        </section>}
 
-        {advanced && <section className="form-card">
+        {showAdvanced && <section className="form-card">
           <div className="section-heading"><span>03</span><div><h2>Controls & primary topics</h2><p>Pulse, Open, Close, Stop, and press-and-hold Jog macros are never retained.</p></div></div>
           <div className="form-grid form-grid--two topic-mode-row">
             <label className="field"><span>Home Assistant discovery</span><select value={gate.homeAssistantDiscoveryEnabled ? "enabled" : "disabled"} onChange={(event) => setGate({ ...gate, homeAssistantDiscoveryEnabled: event.target.value === "enabled" })}><option value="disabled">Disabled</option><option value="enabled">Enabled</option></select></label>
@@ -267,7 +269,7 @@ export function GateEditor({ initial, existing, cloneDraft, advanced = false, ru
           <div className="command-table"><div className="command-row command-row--heading"><span>Action</span><span>Topic</span><span>Payload</span></div>{(["pulse", "open", "close"] as GateCommand[]).map((command) => <div className="command-row" key={command}><strong>{command}</strong><input aria-label={`${command} topic`} value={gate.actions[command].topic} onChange={(event) => setAction(command, "topic", event.target.value)} /><input aria-label={`${command} payload`} value={gate.actions[command].payload} onChange={(event) => setAction(command, "payload", event.target.value)} /></div>)}{stopAction && <><div className="command-row"><strong>stop</strong><input aria-label="stop topic" value={stopAction.topic} onChange={(event) => updateAdvancedTopic(stopAction.id, "topic", event.target.value)} /><input aria-label="stop payload" value={stopAction.payload} onChange={(event) => updateAdvancedTopic(stopAction.id, "payload", event.target.value)} /></div>{(["open", "close"] as const).map((direction) => { const macro = jogMacroDefinition(gate, direction, stopAction); return <div className="command-row command-row--macro" key={`jog-${direction}`}><strong>Jog {direction}</strong><input aria-label={`Jog ${direction} topics`} readOnly value={macro.press.topic === macro.release.topic ? macro.press.topic : `${macro.press.topic} → ${macro.release.topic}`} /><input aria-label={`Jog ${direction} payloads`} readOnly value={`${macro.press.payload} → ${macro.release.payload}`} /></div>; })}</>}</div>
         </section>}
 
-        {advanced && <section className="form-card advanced-topic-card">
+        {showAdvanced && <section className="form-card advanced-topic-card">
           <div className="section-heading advanced-topic-heading"><span>A1</span><div><h2>Additional MQTT topics</h2><p>Load the Turnage Automation controller contract or add a custom broker topic.</p></div><div className="advanced-topic-actions"><button className="secondary-button" type="button" onClick={loadControllerTopics}>Load controller topics</button><button className="secondary-button" type="button" onClick={addAdvancedTopic}><Plus /> Add custom</button></div></div>
           {primaryToggleMappings.length > 0 && <div className="advanced-toggle-settings">{primaryToggleMappings.map(renderToggleControl)}</div>}
           {controllerGroups.some((group) => group.entries.length > 0) && <div className="controller-contract-cards">{controllerGroups.filter((group) => group.entries.length > 0).map((group) => <section className="controller-contract-card" key={group.key}>
@@ -306,7 +308,7 @@ export function GateEditor({ initial, existing, cloneDraft, advanced = false, ru
           })}</div></section>}
         </section>}
 
-        {advanced && <section className="form-card">
+        {showAdvanced && <section className="form-card">
           <div className="section-heading"><span>04</span><div><h2>Status mapping</h2><p>Translate broker payloads into gate states.</p></div></div>
           <div className="form-grid form-grid--two">
             <label className="field"><span>Payload format</span><select value={gate.mapping.format} onChange={(event) => setMapping("format", event.target.value)}><option value="plain">Plain text</option><option value="json">JSON</option></select></label>
@@ -316,11 +318,11 @@ export function GateEditor({ initial, existing, cloneDraft, advanced = false, ru
         </section>}
       </div>
 
-      <section className="test-panel">
+      {!gate.simulated && <section className="test-panel">
         <div><p className="eyebrow">Before saving</p><h2>Verify the live connection</h2><p>The test authenticates, subscribes to every configured status topic, and previews the first received message.</p></div>
         <button className="secondary-button" type="button" disabled={testing || errors.some((error) => error.includes("URL") || error.includes("topic is required"))} onClick={runTest}><Radio className={testing ? "spin" : ""} />{testing ? "Testing…" : "Test connection"}</button>
         {testResult && <div className={`test-result ${testResult.ok ? "test-result--ok" : "test-result--bad"}`}>{testResult.ok && <CheckCircle2 />}<span>{testResult.message}</span></div>}
-      </section>
+      </section>}
 
       {errors.length > 0 && <aside className="validation-panel" aria-live="polite"><strong>Complete setup to save</strong><ul>{errors.map((error, index) => <li key={`${error}-${index}`}>{error}</li>)}</ul></aside>}
       {schedulePicker && <div className="schedule-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setSchedulePicker(null); }}>

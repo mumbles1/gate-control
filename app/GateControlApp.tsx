@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  AlertTriangle, ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Bell, CalendarDays, Camera, ChevronRight, CircleDot, CircleSlash2, Clock3, CloudDownload, CloudUpload, Copy, Download, QrCode, RefreshCw, Send, Share2, Smartphone, Square,
+  AlertTriangle, ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Bell, CalendarDays, Camera, ChevronRight, CircleDot, CircleSlash2, Clock3, CloudDownload, CloudUpload, Copy, Download, FlaskConical, QrCode, RefreshCw, Send, Share2, Smartphone, Square,
   LayoutGrid, List, Menu, Monitor, Moon, Plus, Radio, Settings, SlidersHorizontal, Upload,
   Sun, Trash2, Wifi, WifiOff, X,
 } from "lucide-react";
@@ -17,7 +17,7 @@ import type { ConfigurationBundle } from "./configuration-transfer";
 import { createAlertIdentity, disableScheduleAlerts, enableScheduleAlerts, scheduleAlertState, syncScheduleAlerts, testScheduleAlert } from "./notifications";
 import type { AlertIdentity, ScheduleAlertState } from "./notifications";
 import type { AdditionalMQTTTopic, ColorTheme, DashboardLayout, GateConfiguration, GateDisplayMode, GateRuntimeState, GateState } from "./types";
-import { brokerUrl, cloneData, cloneGate, configurationTransferTopic, createId, defaultGate, displayedGateState, formatControllerTime12h, gateLocationLabel, gatePropertyLabel, gatePropertyOptions, gatesForProperty, migrateGate, schedulePayload, sortGates, validateGate } from "./types";
+import { brokerUrl, cloneData, cloneGate, configurationTransferTopic, createId, defaultGate, defaultSimulatedGate, displayedGateState, formatControllerTime12h, gateLocationLabel, gatePropertyLabel, gatePropertyOptions, gatesForProperty, migrateGate, schedulePayload, sortGates, validateGate } from "./types";
 
 type Screen =
   | { name: "dashboard" }
@@ -81,7 +81,8 @@ function gateTopics(gate: GateConfiguration): string[] {
     .map((topic) => topic.trim().replace(/^\/+|\/+$/g, "")).filter(Boolean);
 }
 
-function ConnectionBadge({ runtime }: { runtime: GateRuntimeState }) {
+function ConnectionBadge({ runtime, simulated = false }: { runtime: GateRuntimeState; simulated?: boolean }) {
+  if (simulated) return <span title="This gate runs only in the local simulator" className="connection-badge connection-badge--demo"><FlaskConical />Simulated</span>;
   return <span title={runtime.error || (runtime.connected ? "This device is connected to the Mosquitto broker" : "This device is not connected to the Mosquitto broker")} className={`connection-badge ${runtime.connected ? "connection-badge--online" : "connection-badge--offline"}`}>
     <span className="connection-path-icons" aria-hidden="true"><Smartphone /><ArrowRight /><MosquittoIcon /></span>
     {runtime.connected ? "Broker linked" : "Broker offline"}
@@ -342,7 +343,16 @@ export function GateControlApp() {
   const [updateBusy, setUpdateBusy] = useState(false);
   const transferFileInput = useRef<HTMLInputElement>(null);
   const detailOpenedAt = useRef(0);
-  const { runtime, publish, publishAdvanced } = useMQTTManager(gates);
+  const [simulatedRuntime, setSimulatedRuntime] = useState<Record<string, GateRuntimeState>>({});
+  const simulationTimers = useRef<Record<string, number>>({});
+  const mqttGates = useMemo(() => gates.filter((gate) => !gate.simulated), [gates]);
+  const { runtime, publish, publishAdvanced } = useMQTTManager(mqttGates);
+
+  useEffect(() => {
+    setSimulatedRuntime((current) => Object.fromEntries(gates.filter((gate) => gate.simulated).map((gate) => [gate.id, current[gate.id] ?? { state: "closed", connected: true, controllerConnected: true, lastMessageAt: Date.now() }])));
+  }, [gates]);
+
+  useEffect(() => () => Object.values(simulationTimers.current).forEach((timer) => window.clearTimeout(timer)), []);
 
   useEffect(() => {
     Promise.all([gateStorage.loadGates(), gateStorage.loadLayout(), gateStorage.loadTheme(), gateStorage.loadDisplayMode(), gateStorage.loadDefaultProperty(), gateStorage.loadActiveProperty(), gateStorage.loadScheduleAlertsEnabled(), gateStorage.loadAlertIdentity(), gateStorage.loadNotificationContactEmail(), gateStorage.loadControllerOfflineDelay(), gateStorage.loadMQTTTransferTopic(), gateStorage.loadMQTTTransferRetain(), gateStorage.loadMQTTTransferGateId()]).then(([savedGates, savedLayout, savedTheme, savedDisplayMode, savedDefaultProperty, savedActiveProperty, savedAlertsEnabled, savedIdentity, savedContactEmail, savedOfflineDelay, savedTransferTopic, savedTransferRetain, savedTransferGateId]) => {
@@ -757,8 +767,48 @@ export function GateControlApp() {
     finally { setTransferBusy(false); }
   };
 
-  const runtimeFor = (gate: GateConfiguration): GateRuntimeState => runtime[gate.id] ?? { state: "offline", connected: false };
-  const connectedCount = gates.filter((gate) => runtimeFor(gate).connected).length;
+  const runtimeFor = (gate: GateConfiguration): GateRuntimeState => gate.simulated
+    ? simulatedRuntime[gate.id] ?? { state: "closed", connected: true, controllerConnected: true, lastMessageAt: Date.now() }
+    : runtime[gate.id] ?? { state: "offline", connected: false };
+  const runSimulation = async (gate: GateConfiguration, command: "pulse" | "open" | "close" | "stop"): Promise<boolean> => {
+    const existingTimer = simulationTimers.current[gate.id];
+    if (existingTimer) window.clearTimeout(existingTimer);
+    const now = Date.now();
+    if (command === "stop") {
+      setSimulatedRuntime((states) => ({ ...states, [gate.id]: { state: "stopped", connected: true, controllerConnected: true, lastMessageAt: now } }));
+      navigator.vibrate?.(18);
+      return true;
+    }
+    if (command === "pulse") {
+      setSimulatedRuntime((states) => ({ ...states, [gate.id]: { state: "opening", connected: true, controllerConnected: true, lastMessageAt: now } }));
+      simulationTimers.current[gate.id] = window.setTimeout(() => {
+        setSimulatedRuntime((states) => ({ ...states, [gate.id]: { state: "open", connected: true, controllerConnected: true, lastMessageAt: Date.now() } }));
+        simulationTimers.current[gate.id] = window.setTimeout(() => {
+          setSimulatedRuntime((states) => ({ ...states, [gate.id]: { state: "closing", connected: true, controllerConnected: true, lastMessageAt: Date.now() } }));
+          simulationTimers.current[gate.id] = window.setTimeout(() => {
+            setSimulatedRuntime((states) => ({ ...states, [gate.id]: { state: "closed", connected: true, controllerConnected: true, lastMessageAt: Date.now() } }));
+            delete simulationTimers.current[gate.id];
+          }, 10_000);
+        }, 5_000);
+      }, 10_000);
+      navigator.vibrate?.(18);
+      return true;
+    }
+    const movingState: GateState = command === "open" ? "opening" : "closing";
+    const settledState: GateState = command === "open" ? "open" : "closed";
+    setSimulatedRuntime((states) => ({ ...states, [gate.id]: { state: movingState, connected: true, controllerConnected: true, lastMessageAt: now } }));
+    simulationTimers.current[gate.id] = window.setTimeout(() => {
+      setSimulatedRuntime((states) => ({ ...states, [gate.id]: { state: settledState, connected: true, controllerConnected: true, lastMessageAt: Date.now() } }));
+      delete simulationTimers.current[gate.id];
+    }, 10_000);
+    navigator.vibrate?.(18);
+    return true;
+  };
+  const publishGate = (gate: GateConfiguration, command: "pulse" | "open" | "close") => gate.simulated ? runSimulation(gate, command) : publish(gate, command);
+  const publishAdvancedGate = (gate: GateConfiguration, action: AdditionalMQTTTopic, options?: { bypassCooldown?: boolean }) => gate.simulated
+    ? runSimulation(gate, action.name === "Stop command" || action.payload.toLowerCase() === "stop" ? "stop" : action.payload.toLowerCase() === "close" ? "close" : "open")
+    : publishAdvanced(gate, action, options);
+  const connectedCount = mqttGates.filter((gate) => runtimeFor(gate).connected).length;
   const propertyOptions = useMemo(() => gatePropertyOptions(gates), [gates]);
   const properties = useMemo(() => propertyOptions.map((option) => option.value), [propertyOptions]);
   const activePropertyLabel = propertyOptions.find((option) => option.value === activeProperty)?.label || activeProperty;
@@ -787,14 +837,14 @@ export function GateControlApp() {
       const exists = current.some((item) => item.id === normalizedGate.id);
       return (exists ? current.map((item) => item.id === normalizedGate.id ? normalizedGate : item) : [...current, { ...normalizedGate, order: current.length }]).sort((a, b) => a.order - b.order);
     });
-    setScreen({ name: "setup" });
+    setScreen(normalizedGate.simulated ? { name: "detail", gateId: normalizedGate.id } : { name: "setup" });
   };
 
   const activateGraphic = (gate: GateConfiguration) => {
     const command = gate.graphicTapAction === "toggle"
       ? (["open", "opening"].includes(runtimeFor(gate).state) ? "close" : "open")
       : "pulse";
-    void publish(gate, command);
+    void publishGate(gate, command);
   };
 
   const openGateDetail = (gateId: string) => {
@@ -821,7 +871,7 @@ export function GateControlApp() {
   if (!loaded) return <main className="loading-screen"><span className="brand-mark"><GateBrandIcon /></span><p>Loading Gate Control…</p></main>;
 
   if (screen.name === "editor") {
-    return <><ServerStatusBanner reachable={serverReachable} /><GateEditor initial={screen.gate} existing={gates} cloneDraft={screen.cloneDraft} advanced={screen.advanced} runtime={runtimeFor(screen.gate)} onPublishAdvanced={publishAdvanced} onSave={saveGate} onCancel={() => setScreen({ name: "setup" })} /></>;
+    return <><ServerStatusBanner reachable={serverReachable} /><GateEditor initial={screen.gate} existing={gates} cloneDraft={screen.cloneDraft} advanced={screen.advanced} runtime={runtimeFor(screen.gate)} onPublishAdvanced={publishAdvancedGate} onSave={saveGate} onCancel={() => setScreen(gates.length ? { name: "setup" } : { name: "dashboard" })} /></>;
   }
 
   if (screen.name === "detail") {
@@ -841,24 +891,24 @@ export function GateControlApp() {
             <button className="icon-button" onClick={() => setScreen({ name: "editor", gate: cloneData(gate) })} aria-label="Edit gate"><SlidersHorizontal /></button>
           </header>
           <section className={`detail-hero state-surface--${visibleState}`}>
-            <div className="detail-status-line"><GateControllerStatusMark runtime={live} state={visibleState} /><strong>{displayedGateLabel(live)}</strong><ConnectionBadge runtime={live} /></div>
+            <div className="detail-status-line"><GateControllerStatusMark runtime={live} state={visibleState} /><strong>{displayedGateLabel(live)}</strong><ConnectionBadge runtime={live} simulated={gate.simulated} /></div>
             {live.warning && <div className="gate-warning gate-warning--detail" role="status"><AlertTriangle />{live.warning}</div>}
             {live.error && <div className="connection-error" role="status"><WifiOff />{live.error}</div>}
             <GateArtwork style={gate.visualStyle} state={visibleState} large onActivate={() => activateGraphic(gate)} />
-            <div className="detail-meta"><span>{formatAge(live.lastMessageAt)}</span><span>{brokerUrl(gate.broker)}</span></div>
+            <div className="detail-meta"><span>{formatAge(live.lastMessageAt)}</span><span>{gate.simulated ? "Local simulator · no MQTT broker" : brokerUrl(gate.broker)}</span></div>
           </section>
           <section className="control-panel" aria-label="Gate controls">
             <p className="control-label">Direct controls</p>
             <div className={`control-buttons ${stopAction ? "control-buttons--four" : ""}`}>
-              <button onClick={() => void publish(gate, "pulse")} disabled={!live.connected}><CircleDot /><span>Pulse</span></button>
-              <button className="control-open" onClick={() => void publish(gate, "open")} disabled={!live.connected}><ArrowUp /><span>Open</span></button>
-              <button className="control-close" onClick={() => void publish(gate, "close")} disabled={!live.connected}><ArrowDown /><span>Close</span></button>
-              {stopAction && <button className="control-stop" onClick={() => void publishAdvanced(gate, stopAction)} disabled={!live.connected}><Square /><span>Stop</span></button>}
+              <button onClick={() => void publishGate(gate, "pulse")} disabled={!live.connected}><CircleDot /><span>Pulse</span></button>
+              <button className="control-open" onClick={() => void publishGate(gate, "open")} disabled={!live.connected}><ArrowUp /><span>Open</span></button>
+              <button className="control-close" onClick={() => void publishGate(gate, "close")} disabled={!live.connected}><ArrowDown /><span>Close</span></button>
+              {stopAction && <button className="control-stop" onClick={() => void publishAdvancedGate(gate, stopAction)} disabled={!live.connected}><Square /><span>Stop</span></button>}
             </div>
-            {stopAction && <JogControls gate={gate} runtime={live} stopAction={stopAction} onPublish={publish} onStop={publishAdvanced} />}
-            <p className="control-help">Actions publish once and never change the display until the broker reports a new status.</p>
+            {stopAction && <JogControls gate={gate} runtime={live} stopAction={stopAction} onPublish={publishGate} onStop={publishAdvancedGate} />}
+            <p className="control-help">{gate.simulated ? "Simulation controls use the real gate animation locally. Pulse opens the gate, waits 5 seconds, then closes it." : "Actions publish once and never change the display until the broker reports a new status."}</p>
           </section>
-          <AutoTimerCard gate={gate} runtime={live} onPublish={publishAdvanced} />
+          {!gate.simulated && <AutoTimerCard gate={gate} runtime={live} onPublish={publishAdvancedGate} />}
           {live.lastPublish && live.lastPublish.at >= detailOpenedAt.current && <div className={`toast ${live.lastPublish.ok ? "toast--ok" : "toast--bad"}`} role="status"><span>{live.lastPublish.message}</span><X /></div>}
         </main>
         <AppNav screen={screen} onDashboard={() => setScreen({ name: "dashboard" })} onSetup={() => setScreen({ name: "setup" })} onAppSettings={() => setScreen({ name: "appSettings" })} />
@@ -882,13 +932,13 @@ export function GateControlApp() {
               const visibleState = displayedGateState(live);
               return <article className="setup-gate-row" key={gate.id}>
                 <div className={`mini-state mini-state--${visibleState}`}><GateArtwork style={gate.visualStyle} state={visibleState} onActivate={() => setScreen({ name: "detail", gateId: gate.id })} activationLabel={`Open ${gate.name} controls.`} /></div>
-                <div className="setup-gate-copy"><h3>{gate.name}</h3><p>{gatePropertyLabel(gate)} / {gateLocationLabel(gate)} · {brokerUrl(gate.broker)}</p><span>{gate.statusTopic}</span></div>
-                <ConnectionBadge runtime={live} />
+                <div className="setup-gate-copy"><h3>{gate.name}</h3><p>{gatePropertyLabel(gate)} / {gateLocationLabel(gate)} · {gate.simulated ? "Local simulator" : brokerUrl(gate.broker)}</p><span>{gate.simulated ? "No MQTT topics or broker connection" : gate.statusTopic}</span></div>
+                <ConnectionBadge runtime={live} simulated={gate.simulated} />
                 <div className="row-actions">
                   <button disabled={index === 0} onClick={() => moveGate(gate, -1)} aria-label={`Move ${gate.name} up`}><ArrowUp /></button>
                   <button disabled={index === sortedGates.length - 1} onClick={() => moveGate(gate, 1)} aria-label={`Move ${gate.name} down`}><ArrowDown /></button>
                   <button onClick={() => setScreen({ name: "editor", gate: cloneGate(gate), cloneDraft: true })} aria-label={`Clone ${gate.name}`}><Copy /></button>
-                  <LongPressEditButton gateName={gate.name} onEdit={() => setScreen({ name: "editor", gate: cloneData(gate) })} onAdvanced={() => setScreen({ name: "editor", gate: cloneData(gate), advanced: true })} />
+                  <LongPressEditButton gateName={gate.name} onEdit={() => setScreen({ name: "editor", gate: cloneData(gate) })} onAdvanced={() => setScreen({ name: "editor", gate: cloneData(gate), advanced: !gate.simulated })} />
                   <button className="danger-action" onClick={() => removeGate(gate)} aria-label={`Delete ${gate.name}`}><Trash2 /></button>
                 </div>
               </article>;
@@ -1012,15 +1062,15 @@ export function GateControlApp() {
       <main className="dashboard-page">
         <header className="dashboard-header">
           <div className="brand"><span className="brand-mark"><GateBrandIcon /></span><div><p>Gate Control</p><span>Turnage Automation</span></div></div>
-          <div className="fleet-status"><span className={connectedCount ? "fleet-pulse" : "fleet-pulse fleet-pulse--offline"} /><div><strong>{connectedCount}/{gates.length}</strong><span>brokers online</span></div></div>
+          <div className="fleet-status"><span className={connectedCount ? "fleet-pulse" : "fleet-pulse fleet-pulse--offline"} /><div><strong>{connectedCount}/{mqttGates.length}</strong><span>brokers online</span></div></div>
           <button className="icon-button settings-shortcut" onClick={() => setScreen({ name: "appSettings" })} aria-label="Open app settings"><Settings /></button>
         </header>
         <section className="dashboard-intro"><div><p className="eyebrow">Live overview</p><h1>{displayMode === "property" && activeProperty ? activePropertyLabel : "All gates"}</h1></div><div className="dashboard-sort-controls"><label><span>Order</span><select value={displayMode} onChange={(event) => { const mode = event.target.value as GateDisplayMode; setDisplayMode(mode); if (mode === "property" && !properties.includes(activeProperty)) setActiveProperty(properties.includes(defaultProperty) ? defaultProperty : (properties[0] ?? "")); }}><option value="all">Show All</option><option value="property">Property</option></select></label>{displayMode === "property" && <label><span>Property</span><select value={activeProperty} onChange={(event) => setActiveProperty(event.target.value)}>{propertyOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>}</div></section>
-        {gates.length === 0 ? <EmptyDashboard onAdd={() => setScreen({ name: "editor", gate: defaultGate(0) })} /> : dashboardGates.length === 0 ? <section className="empty-dashboard compact-empty"><p className="eyebrow">No matching gates</p><h2>{activeProperty || "Property"}</h2><p>Choose another property from the dashboard control or update gate setup.</p></section> : <section className={`gate-collection gate-collection--${layout}`}>{dashboardGates.map((gate) => {
+        {gates.length === 0 ? <EmptyDashboard onAdd={() => setScreen({ name: "editor", gate: defaultGate(0) })} onAddDemo={() => setScreen({ name: "editor", gate: defaultSimulatedGate(0) })} /> : dashboardGates.length === 0 ? <section className="empty-dashboard compact-empty"><p className="eyebrow">No matching gates</p><h2>{activeProperty || "Property"}</h2><p>Choose another property from the dashboard control or update gate setup.</p></section> : <section className={`gate-collection gate-collection--${layout}`}>{dashboardGates.map((gate) => {
           const live = runtimeFor(gate);
           const visibleState = displayedGateState(live);
           return <article className={`gate-card gate-card--${visibleState}`} key={gate.id} onClick={() => openGateDetail(gate.id)} onKeyDown={(event) => { if (event.key === "Enter") openGateDetail(gate.id); }} role="button" tabIndex={0} aria-label={`Open ${gate.name} details`}>
-            <div className="gate-card-top"><div><p className="gate-index">{gatePropertyLabel(gate)} / {gateLocationLabel(gate)}</p><h2>{gate.name}</h2></div><ConnectionBadge runtime={live} /></div>
+            <div className="gate-card-top"><div><p className="gate-index">{gatePropertyLabel(gate)} / {gateLocationLabel(gate)}</p><h2>{gate.name}</h2></div><ConnectionBadge runtime={live} simulated={gate.simulated} /></div>
             <div className="gate-card-art" onClick={(event) => event.stopPropagation()}><GateArtwork style={gate.visualStyle} state={visibleState} onActivate={() => activateGraphic(gate)} /></div>
             <div className="gate-card-bottom"><div className="state-copy"><GateControllerStatusMark runtime={live} state={visibleState} /><div><strong>{displayedGateLabel(live)}</strong><span>{formatAge(live.lastMessageAt)}</span>{live.warning && <span className="gate-warning" role="status"><AlertTriangle />{live.warning}</span>}</div></div><ChevronRight /></div>
           </article>;
@@ -1082,8 +1132,8 @@ function LongPressEditButton({ gateName, onEdit, onAdvanced }: { gateName: strin
   ><Settings /></button>;
 }
 
-function EmptyDashboard({ onAdd }: { onAdd: () => void }) {
-  return <section className="empty-dashboard"><div className="empty-art"><GateArtwork style="sliding" state="closed" /><GateArtwork style="swing" state="opening" /><GateArtwork style="barrier" state="open" /></div><p className="eyebrow">Ready for your first endpoint</p><h2>No gates configured</h2><p>Add a Mosquitto secure WebSocket URL, credentials, topics, and payload mappings. Everything stays on this device.</p><button className="primary-button" onClick={onAdd}><Plus /> Add first gate</button></section>;
+function EmptyDashboard({ onAdd, onAddDemo }: { onAdd: () => void; onAddDemo: () => void }) {
+  return <section className="empty-dashboard"><div className="empty-art"><GateArtwork style="sliding" state="closed" /><GateArtwork style="swing" state="opening" /><GateArtwork style="barrier" state="open" /></div><p className="eyebrow">Ready for your first endpoint</p><h2>No gates configured</h2><p>Add a Mosquitto secure WebSocket endpoint, or explore the complete app with a simulated gate that never connects to MQTT.</p><div className="empty-dashboard-actions"><button className="primary-button" onClick={onAdd}><Plus /> Add first gate</button><button className="secondary-button demo-gate-button" onClick={onAddDemo}><FlaskConical /> Add demo simulated gate</button></div></section>;
 }
 
 function EmptySetup({ onAdd }: { onAdd: () => void }) {
