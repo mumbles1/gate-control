@@ -322,7 +322,6 @@ export function GateControlApp() {
   const [transferScope, setTransferScope] = useState<"app" | "gate">("app");
   const [transferBusy, setTransferBusy] = useState(false);
   const [transferMessage, setTransferMessage] = useState("");
-  const [preparedShareLink, setPreparedShareLink] = useState("");
   const [pendingGateTransferToken, setPendingGateTransferToken] = useState("");
   const [pendingTransferSource, setPendingTransferSource] = useState<"link" | "qr">("link");
   const [qrShare, setQRShare] = useState<{ dataUrl: string; url: string; transferName: string; expiresAt: number } | null>(null);
@@ -393,7 +392,7 @@ export function GateControlApp() {
     if (!token) return;
     setPendingGateTransferToken(token);
     setPendingTransferSource("link");
-    setTransferMessage("A shared configuration is ready. Select Import shared configuration to continue.");
+    setTransferMessage("An AirDrop configuration is ready. Select Receive configuration in the AirDrop card.");
     setScreen({ name: "appSettings" });
   }, [loaded]);
 
@@ -431,7 +430,6 @@ export function GateControlApp() {
   useEffect(() => { if (loaded) void gateStorage.saveMQTTTransferTopic(mqttTransferTopic); }, [mqttTransferTopic, loaded]);
   useEffect(() => { if (loaded) void gateStorage.saveMQTTTransferRetain(mqttTransferRetain); }, [mqttTransferRetain, loaded]);
   useEffect(() => { if (loaded) void gateStorage.saveMQTTTransferGateId(mqttTransferGateId); }, [mqttTransferGateId, loaded]);
-  useEffect(() => { setPreparedShareLink(""); }, [gates, layout, theme, displayMode, defaultProperty, notificationContactEmail, controllerOfflineDelay, mqttTransferTopic, mqttTransferRetain, mqttTransferGateId, transferScope]);
   useEffect(() => {
     if (!loaded) return;
     void scheduleAlertState(scheduleAlertsEnabled).then(setAlertState);
@@ -613,27 +611,17 @@ export function GateControlApp() {
     finally { setTransferBusy(false); }
   };
 
-  const prepareAirDropLink = async () => {
-    setTransferBusy(true); setTransferMessage("Preparing a temporary AirDrop link…");
+  const shareWithAirDrop = async () => {
+    setTransferBusy(true); setTransferMessage("Preparing AirDrop…");
     try {
       const bundle = makeConfigurationBundle();
       if (!bundle.gates.length) throw new Error(transferScope === "gate" ? "Select a gate to transfer." : "There are no gates to export.");
       const payload = await encryptConfiguration(bundle, "");
       const transfer = await createGateTransfer(payload);
       if (!transfer.url) throw new Error("The app server did not provide a transfer address.");
-      setPreparedShareLink(transfer.url);
-      setTransferMessage("AirDrop link ready. Select Send with AirDrop. The link expires in 10 minutes.");
-    } catch (error) { setTransferMessage(error instanceof Error ? error.message : "Could not prepare the AirDrop link."); }
-    finally { setTransferBusy(false); }
-  };
-
-  const sendWithAirDrop = async () => {
-    if (!preparedShareLink) return;
-    setTransferBusy(true); setTransferMessage("Opening the device Share Sheet…");
-    try {
-      const result = await shareConfigurationLink(preparedShareLink);
-      setTransferMessage(result === "shared" ? "AirDrop Share Sheet opened." : "Clone link copied. Open it on the receiving device within 10 minutes.");
-    } catch (error) { setTransferMessage(error instanceof Error ? error.message : "Could not open AirDrop sharing."); }
+      const result = await shareConfigurationLink(transfer.url);
+      setTransferMessage(result === "shared" ? "Share Sheet opened. Select the receiving device in AirDrop." : "AirDrop link copied. Paste it into Import received link on the other device within 10 minutes.");
+    } catch (error) { setTransferMessage(error instanceof Error ? error.message : "Could not start AirDrop sharing."); }
     finally { setTransferBusy(false); }
   };
 
@@ -950,9 +938,8 @@ export function GateControlApp() {
                   <article className="transfer-method">
                     <header><span className="transfer-method-icon"><Share2 /></span><div><strong>AirDrop or device share</strong><small>Send a temporary clone link to another device</small></div></header>
                     <div className="transfer-method-actions">
-                      <button type="button" className="secondary-button" disabled={transferBusy} onClick={() => void prepareAirDropLink()}><Share2 /> Prepare AirDrop link</button>
-                      <button type="button" className="secondary-button" disabled={transferBusy || !preparedShareLink} onClick={() => void sendWithAirDrop()}><Send /> Send with AirDrop</button>
-                      <button type="button" className="secondary-button" disabled={transferBusy} onClick={importAirDropLink}><Upload /> Import AirDrop link</button>
+                      <button type="button" className="secondary-button" disabled={transferBusy} onClick={() => void shareWithAirDrop()}><Share2 /> Share with AirDrop</button>
+                      <button type="button" className="secondary-button" disabled={transferBusy} onClick={importAirDropLink}><Upload /> Import received link</button>
                       {pendingGateTransferToken && pendingTransferSource === "link" && <button type="button" className="primary-button" disabled={transferBusy} onClick={() => void importPendingGateTransfer()}><CloudDownload /> Receive configuration</button>}
                     </div>
                     <p className="transfer-method-note">The recipient opens the link in Gate Control and confirms the import. Links expire after 10 minutes.</p>
