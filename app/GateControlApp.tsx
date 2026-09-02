@@ -65,6 +65,17 @@ function controllerOfflineDelayValue(value: string): number | null {
   return Number.isInteger(seconds) && seconds >= 15 && seconds <= 3600 ? seconds : null;
 }
 
+function isInstalledWebApp(): boolean {
+  return window.matchMedia("(display-mode: standalone)").matches
+    || Boolean((navigator as Navigator & { standalone?: boolean }).standalone);
+}
+
+function isIOSBrowserOutsideInstalledApp(): boolean {
+  const iOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
+    || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  return iOS && !isInstalledWebApp();
+}
+
 function gateTopics(gate: GateConfiguration): string[] {
   return [gate.statusTopic, gate.availabilityTopic, gate.actions.pulse.topic, gate.actions.open.topic, gate.actions.close.topic, ...(gate.advancedTopics ?? []).map((entry) => entry.topic)]
     .map((topic) => topic.trim().replace(/^\/+|\/+$/g, "")).filter(Boolean);
@@ -392,7 +403,9 @@ export function GateControlApp() {
     if (!token) return;
     setPendingGateTransferToken(token);
     setPendingTransferSource("link");
-    setTransferMessage("An AirDrop configuration is ready. Select Receive configuration in the AirDrop card.");
+    setTransferMessage(isIOSBrowserOutsideInstalledApp()
+      ? "AirDrop opened in Safari. Copy this transfer, open Gate Control from your Home Screen, then select Receive AirDrop in this app."
+      : "An AirDrop configuration is ready. Select Receive configuration in the AirDrop card.");
     setScreen({ name: "appSettings" });
   }, [loaded]);
 
@@ -674,9 +687,7 @@ export function GateControlApp() {
     }
   };
 
-  const importAirDropLink = () => {
-    const value = window.prompt("Paste the Gate Control AirDrop link you received:", "");
-    if (!value?.trim()) return;
+  const queueAirDropLink = (value: string) => {
     try {
       const shared = new URL(value.trim(), window.location.origin);
       const token = shared.searchParams.get("gateTransfer")?.trim();
@@ -686,6 +697,22 @@ export function GateControlApp() {
       setTransferMessage("AirDrop link received. Select Receive configuration below to continue.");
     } catch (error) {
       setTransferMessage(error instanceof Error ? error.message : "That AirDrop link could not be read.");
+    }
+  };
+
+  const importAirDropLink = async () => {
+    let value = "";
+    try { value = (await navigator.clipboard.readText()).trim(); } catch { /* Safari may require manual paste. */ }
+    if (!value.includes("gateTransfer=")) value = window.prompt("Paste the Gate Control AirDrop link you received:", value) ?? "";
+    if (value.trim()) queueAirDropLink(value);
+  };
+
+  const copyAirDropForInstalledApp = async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      setTransferMessage("Transfer copied. Open Gate Control from your Home Screen, open App settings, then select Receive AirDrop in this app.");
+    } catch {
+      window.prompt("Copy this transfer link, then open Gate Control from your Home Screen:", window.location.href);
     }
   };
 
@@ -926,7 +953,7 @@ export function GateControlApp() {
               <section className="transfer-group transfer-group--direct">
                 <header><strong>2. Transfer directly</strong><span>Choose one sharing method</span></header>
                 <div className="transfer-methods">
-                  <article className="transfer-method">
+                  <article className="transfer-method transfer-method--file">
                     <header><span className="transfer-method-icon"><Download /></span><div><strong>Backup file</strong><small>Save a durable copy or import one inside Gate Control</small></div></header>
                     <div className="transfer-method-actions">
                       <button type="button" className="secondary-button" disabled={transferBusy} onClick={() => void exportConfiguration()}><Download /> Save backup</button>
@@ -935,16 +962,18 @@ export function GateControlApp() {
                     <p className="transfer-method-note">On iPhone, open Gate Control first and select Import backup; tapping a .gateconfig file in Files may not launch the app.</p>
                     <input ref={transferFileInput} className="transfer-file-input" type="file" accept=".gateconfig,application/vnd.turnageautomation.gate-control+json,application/json" onChange={(event) => void importConfigurationFile(event.target.files?.[0])} />
                   </article>
-                  <article className="transfer-method">
+                  <article className="transfer-method transfer-method--airdrop">
                     <header><span className="transfer-method-icon"><Share2 /></span><div><strong>AirDrop or device share</strong><small>Send a temporary clone link to another device</small></div></header>
                     <div className="transfer-method-actions">
                       <button type="button" className="secondary-button" disabled={transferBusy} onClick={() => void shareWithAirDrop()}><Share2 /> Share with AirDrop</button>
-                      <button type="button" className="secondary-button" disabled={transferBusy} onClick={importAirDropLink}><Upload /> Import received link</button>
-                      {pendingGateTransferToken && pendingTransferSource === "link" && <button type="button" className="primary-button" disabled={transferBusy} onClick={() => void importPendingGateTransfer()}><CloudDownload /> Receive configuration</button>}
+                      <button type="button" className="secondary-button" disabled={transferBusy} onClick={() => void importAirDropLink()}><Upload /> Receive AirDrop in this app</button>
+                      {pendingGateTransferToken && pendingTransferSource === "link" && (isIOSBrowserOutsideInstalledApp()
+                        ? <button type="button" className="primary-button" disabled={transferBusy} onClick={() => void copyAirDropForInstalledApp()}><Copy /> Copy for Home Screen app</button>
+                        : <button type="button" className="primary-button" disabled={transferBusy} onClick={() => void importPendingGateTransfer()}><CloudDownload /> Receive configuration</button>)}
                     </div>
-                    <p className="transfer-method-note">The recipient opens the link in Gate Control and confirms the import. Links expire after 10 minutes.</p>
+                    <p className="transfer-method-note">On iPhone, AirDrop first opens the link in Safari. Copy it, open the installed Gate Control app, and select Receive AirDrop in this app. Links expire after 10 minutes.</p>
                   </article>
-                  <article className="transfer-method">
+                  <article className="transfer-method transfer-method--qr">
                     <header><span className="transfer-method-icon"><QrCode /></span><div><strong>QR code</strong><small>Share or scan one gate</small></div></header>
                     <div className="transfer-method-actions">
                       <button type="button" className="secondary-button" disabled={transferBusy || !gates.length} onClick={() => void shareGateByQRCode()}><QrCode /> Share QR</button>
