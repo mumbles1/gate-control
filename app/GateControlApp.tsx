@@ -23,6 +23,7 @@ type Screen =
   | { name: "dashboard" }
   | { name: "setup" }
   | { name: "appSettings" }
+  | { name: "accessControl"; gateId: string }
   | { name: "detail"; gateId: string }
   | { name: "editor"; gate: GateConfiguration; cloneDraft?: boolean; advanced?: boolean };
 
@@ -920,6 +921,19 @@ export function GateControlApp() {
     );
   }
 
+  if (screen.name === "accessControl") {
+    const gate = gates.find((item) => item.id === screen.gateId);
+    if (!gate || !accessControlConfigured(gate.accessControl)) {
+      return <main className="loading-screen"><button type="button" className="secondary-button" onClick={() => setScreen({ name: "setup" })}><ArrowLeft /> Return to Gate Control</button></main>;
+    }
+    const url = accessControlUrl(gate.accessControl);
+    return (
+      <div className="access-control-view">
+        <iframe className="access-control-view__frame" src={url} title={`Access Control for ${gate.name}`} allow="clipboard-read; clipboard-write" />
+      </div>
+    );
+  }
+
   if (screen.name === "setup") {
     return (
       <div className="app-shell">
@@ -939,7 +953,7 @@ export function GateControlApp() {
                 <div className="setup-gate-copy"><h3>{gate.name}</h3><p>{gatePropertyLabel(gate)} / {gateLocationLabel(gate)} · {gate.simulated ? "Local simulator" : brokerUrl(gate.broker)}</p><span>{gate.simulated ? "No MQTT topics or broker connection" : gate.statusTopic}</span></div>
                 <ConnectionBadge runtime={live} simulated={gate.simulated} />
                 <div className="row-actions">
-                  {accessControlConfigured(gate.accessControl) && <a className="access-control-shortcut" href={accessControlUrl(gate.accessControl)} aria-label={`Open Access Control for ${gate.name}`} title="Open Access Control - HTTP"><AccessControlIcon /></a>}
+                  {accessControlConfigured(gate.accessControl) && <button type="button" className="access-control-shortcut" onClick={() => setScreen({ name: "accessControl", gateId: gate.id })} aria-label={`Open Access Control for ${gate.name}`} title="Open Access Control - HTTP"><AccessControlIcon /></button>}
                   <button disabled={index === 0} onClick={() => moveGate(gate, -1)} aria-label={`Move ${gate.name} up`}><ArrowUp /></button>
                   <button disabled={index === sortedGates.length - 1} onClick={() => moveGate(gate, 1)} aria-label={`Move ${gate.name} down`}><ArrowDown /></button>
                   <button onClick={() => setScreen({ name: "editor", gate: cloneGate(gate), cloneDraft: true })} aria-label={`Clone ${gate.name}`}><Copy /></button>
