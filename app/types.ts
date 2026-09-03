@@ -41,6 +41,31 @@ export interface MQTTActionMapping {
   payload: string;
 }
 
+export interface AccessControlSettings {
+  protocol: "http" | "https";
+  host: string;
+  port: number;
+  basePath: string;
+}
+
+export const defaultAccessControlSettings = (): AccessControlSettings => ({
+  protocol: "http",
+  host: "",
+  port: 8080,
+  basePath: "",
+});
+
+export function accessControlConfigured(settings?: AccessControlSettings): boolean {
+  return Boolean(settings?.host.trim());
+}
+
+export function accessControlUrl(settings?: AccessControlSettings): string {
+  if (!settings?.host.trim()) return "";
+  const host = settings.host.trim().replace(/^https?:\/\//i, "").replace(/\/+$/g, "");
+  const basePath = settings.basePath.trim().replace(/^\/+|\/+$/g, "");
+  return `${settings.protocol}://${host}:${settings.port}${basePath ? `/${basePath}` : ""}`;
+}
+
 export interface AdditionalMQTTTopic {
   id: string;
   name: string;
@@ -182,6 +207,7 @@ export interface GateConfiguration {
   visualStyle: GateVisualStyle;
   graphicTapAction: GraphicTapAction;
   homeAssistantDiscoveryEnabled: boolean;
+  accessControl: AccessControlSettings;
   broker: BrokerSettings;
   statusTopic: string;
   availabilityTopic: string;
@@ -386,6 +412,7 @@ export const defaultGate = (order = 0): GateConfiguration => {
   visualStyle: "sliding",
   graphicTapAction: "pulse",
   homeAssistantDiscoveryEnabled: false,
+  accessControl: defaultAccessControlSettings(),
   broker: {
     url: `wss://${host}:443/${basePath}`,
     protocol: "wss",
@@ -462,6 +489,11 @@ export function validateGate(gate: GateConfiguration, existing: GateConfiguratio
   if (!gate.name.trim()) errors.push("Gate name is required.");
   if (!gate.property.trim()) errors.push("Property is required.");
   if (!gate.location.trim()) errors.push("Location is required.");
+  if (accessControlConfigured(gate.accessControl)) {
+    if (!Number.isInteger(gate.accessControl.port) || gate.accessControl.port < 1 || gate.accessControl.port > 65535) errors.push("Access control port must be between 1 and 65535.");
+    try { new URL(accessControlUrl(gate.accessControl)); }
+    catch { errors.push("Enter a valid access control server IP or hostname."); }
+  }
   if (gate.simulated) return errors;
   try {
     if (!Number.isInteger(gate.broker.port) || gate.broker.port < 1 || gate.broker.port > 65535) errors.push("Broker port must be between 1 and 65535.");
@@ -517,6 +549,7 @@ export function migrateGate(gate: GateConfiguration): GateConfiguration {
   }
   return {
     ...gate,
+    accessControl: { ...defaultAccessControlSettings(), ...(gate.accessControl ?? {}) },
     broker: migrateBrokerSettings(gate.broker),
     property,
     propertyAlias: gate.propertyAlias?.trim() ?? "",

@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { ArrowLeft, CheckCircle2, Clock3, Copy, Eye, EyeOff, FlaskConical, Plus, Radio, Save, Send, ShieldAlert, Trash2, X } from "lucide-react";
 import { testGateConnection } from "./mqtt-service";
 import type { AdditionalMQTTTopic, BrokerProtocol, GateCommand, GateConfiguration, GateRuntimeState } from "./types";
-import { brokerUrl, cloneData, controllerTopicDefaults, createId, defaultBrokerPort, jogMacroDefinition, readBinaryPayload, schedulePayload, topicDefaults, updateGatePlace, validateGate } from "./types";
+import { accessControlUrl, brokerUrl, cloneData, controllerTopicDefaults, createId, defaultBrokerPort, jogMacroDefinition, readBinaryPayload, schedulePayload, topicDefaults, updateGatePlace, validateGate } from "./types";
 
 interface GateEditorProps {
   initial: GateConfiguration;
@@ -32,6 +32,16 @@ export function GateEditor({ initial, existing, cloneDraft, advanced = false, ru
 
   const setBroker = (key: keyof GateConfiguration["broker"], value: string | number) => {
     setGate((current) => ({ ...current, broker: { ...current.broker, [key]: value } }));
+  };
+  const setAccessControl = (key: keyof GateConfiguration["accessControl"], value: string | number) => {
+    setGate((current) => {
+      const accessControl = { ...current.accessControl, [key]: value };
+      if (key === "protocol") {
+        const wasDefaultPort = current.accessControl.port === (current.accessControl.protocol === "https" ? 8443 : 8080);
+        if (wasDefaultPort) accessControl.port = value === "https" ? 8443 : 8080;
+      }
+      return { ...current, accessControl };
+    });
   };
   const setBrokerAddress = (key: "protocol" | "host" | "port" | "basePath" | "tls" | "validateCertificate", value: string | number | boolean) => {
     setGate((current) => {
@@ -233,6 +243,18 @@ export function GateEditor({ initial, existing, cloneDraft, advanced = false, ru
             <label className="field"><span>Location alias <em>optional</em></span><input placeholder="North Entrance" value={gate.locationAlias} onChange={(event) => setGate({ ...gate, locationAlias: event.target.value })} /><small>{gate.simulated ? "Shown in gate labels." : "Shown in gate labels; MQTT topics keep the topic value above."}</small></label>
             <label className="field field--wide"><span>Graphic tap action</span><select value={gate.graphicTapAction} onChange={(event) => setGate({ ...gate, graphicTapAction: event.target.value as GateConfiguration["graphicTapAction"] })}><option value="pulse">Pulse</option><option value="toggle">Toggle open / close</option></select><small>{gate.simulated ? "Runs the selected action in the local simulator." : "Toggle uses the Open and Close topics and payloads configured below."}</small></label>
           </div>
+        </section>
+
+        <section className="form-card access-control-card">
+          <div className="section-heading"><span className="section-heading-logo"><img src="/access-control-logo.svg" alt="" aria-hidden="true" /></span><div><h2>Access control communication</h2><p>Optional shortcut to this gate's UHPPOTED Access Control HTTP server.</p></div></div>
+          <div className="form-grid form-grid--two">
+            <label className="field"><span>Protocol</span><select value={gate.accessControl.protocol} onChange={(event) => setAccessControl("protocol", event.target.value)}><option value="http">http://</option><option value="https">https://</option></select></label>
+            <label className="field"><span>Server IP or hostname <em>optional</em></span><input inputMode="url" autoCapitalize="none" autoCorrect="off" spellCheck={false} placeholder="192.168.0.208" value={gate.accessControl.host} onChange={(event) => setAccessControl("host", event.target.value)} /></label>
+            <label className="field"><span>Port</span><input type="number" min={1} max={65535} inputMode="numeric" value={Number.isNaN(gate.accessControl.port) ? "" : gate.accessControl.port} onChange={(event) => setAccessControl("port", event.target.value === "" ? Number.NaN : Number(event.target.value))} /></label>
+            <label className="field"><span>Base path <em>optional</em></span><input autoCapitalize="none" autoCorrect="off" spellCheck={false} placeholder="Leave blank for the server home page" value={gate.accessControl.basePath} onChange={(event) => setAccessControl("basePath", event.target.value)} /></label>
+            <div className="broker-preview field--wide"><span>Effective address</span><code>{accessControlUrl(gate.accessControl) || "Not configured — shortcut will be hidden"}</code></div>
+          </div>
+          <div className="credential-note"><img className="access-control-note-icon" src="/access-control-logo.svg" alt="" aria-hidden="true" /><span>When a server is configured, its Access Control shortcut appears only on this gate's Configured Endpoints card.</span></div>
         </section>
 
         {!gate.simulated && <section className="form-card">

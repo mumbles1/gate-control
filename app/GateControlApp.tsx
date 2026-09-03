@@ -17,7 +17,7 @@ import type { ConfigurationBundle } from "./configuration-transfer";
 import { createAlertIdentity, disableScheduleAlerts, enableScheduleAlerts, scheduleAlertState, syncScheduleAlerts, testScheduleAlert } from "./notifications";
 import type { AlertIdentity, ScheduleAlertState } from "./notifications";
 import type { AdditionalMQTTTopic, ColorTheme, DashboardLayout, GateConfiguration, GateDisplayMode, GateRuntimeState, GateState } from "./types";
-import { brokerUrl, cloneData, cloneGate, configurationTransferTopic, createId, defaultGate, defaultSimulatedGate, displayedGateState, formatControllerTime12h, gateLocationLabel, gatePropertyLabel, gatePropertyOptions, gatesForProperty, migrateGate, schedulePayload, sortGates, validateGate } from "./types";
+import { accessControlConfigured, accessControlUrl, brokerUrl, cloneData, cloneGate, configurationTransferTopic, createId, defaultGate, defaultSimulatedGate, displayedGateState, formatControllerTime12h, gateLocationLabel, gatePropertyLabel, gatePropertyOptions, gatesForProperty, migrateGate, schedulePayload, sortGates, validateGate } from "./types";
 
 type Screen =
   | { name: "dashboard" }
@@ -50,6 +50,10 @@ function GateBrandIcon() {
 
 function MosquittoIcon() {
   return <img className="mosquitto-logo" src="/mosquitto-logo.svg" alt="" aria-hidden="true" />;
+}
+
+function AccessControlIcon() {
+  return <img className="access-control-logo" src="/access-control-logo.svg" alt="" aria-hidden="true" />;
 }
 
 function formatAge(timestamp?: number) {
@@ -935,6 +939,7 @@ export function GateControlApp() {
                 <div className="setup-gate-copy"><h3>{gate.name}</h3><p>{gatePropertyLabel(gate)} / {gateLocationLabel(gate)} · {gate.simulated ? "Local simulator" : brokerUrl(gate.broker)}</p><span>{gate.simulated ? "No MQTT topics or broker connection" : gate.statusTopic}</span></div>
                 <ConnectionBadge runtime={live} simulated={gate.simulated} />
                 <div className="row-actions">
+                  {accessControlConfigured(gate.accessControl) && <a className="access-control-shortcut" href={accessControlUrl(gate.accessControl)} target="_blank" rel="noreferrer" aria-label={`Open Access Control for ${gate.name}`} title="Open Access Control - HTTP"><AccessControlIcon /></a>}
                   <button disabled={index === 0} onClick={() => moveGate(gate, -1)} aria-label={`Move ${gate.name} up`}><ArrowUp /></button>
                   <button disabled={index === sortedGates.length - 1} onClick={() => moveGate(gate, 1)} aria-label={`Move ${gate.name} down`}><ArrowDown /></button>
                   <button onClick={() => setScreen({ name: "editor", gate: cloneGate(gate), cloneDraft: true })} aria-label={`Clone ${gate.name}`}><Copy /></button>
