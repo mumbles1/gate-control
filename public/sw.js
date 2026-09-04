@@ -1,4 +1,4 @@
-const CACHE = "gate-control-v33";
+const CACHE = "gate-control-v34";
 const SHELL = ["/", "/offline.html", "/manifest.webmanifest", "/gate-icon.svg", "/icon-192.png", "/icon-512.png", "/apple-touch-icon.png"];
 
 async function fetchWithTimeout(request, milliseconds) {
@@ -25,6 +25,20 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET" || new URL(event.request.url).origin !== self.location.origin) return;
   const url = new URL(event.request.url);
+  const integratedToolRequest =
+    url.pathname === "/mqtt-explorer" ||
+    url.pathname.startsWith("/mqtt-explorer/") ||
+    url.pathname === "/access-control" ||
+    url.pathname.startsWith("/access-control/") ||
+    url.pathname.startsWith("/socket.io/") ||
+    /^\/[^/]+\.bundle\.js$/.test(url.pathname);
+
+  // Integrated services have their own HTML, bundles, and socket lifecycle.
+  // Never serve those requests from Gate Control's application-shell cache.
+  if (integratedToolRequest) {
+    event.respondWith(fetch(event.request, { cache: "no-store" }));
+    return;
+  }
   if (event.request.mode === "navigate") {
     event.respondWith(fetchWithTimeout(event.request, 5000).then((response) => {
       if (!response.ok) throw new Error("App server unavailable");
