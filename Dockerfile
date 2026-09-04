@@ -30,5 +30,5 @@ EXPOSE 3000
 EXPOSE 8080
 EXPOSE 1883
 EXPOSE 9001
-HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 CMD wget -qO- "http://127.0.0.1:${GATE_CONTROL_LISTEN_PORT}/" >/dev/null || exit 1
+HEALTHCHECK --interval=30s --timeout=10s --start-period=45s --retries=3 CMD wget -qO- "http://127.0.0.1:${GATE_CONTROL_LISTEN_PORT}/api/health" >/dev/null || exit 1
 CMD ["pnpm", "start"]
