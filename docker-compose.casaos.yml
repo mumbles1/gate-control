@@ -4,7 +4,6 @@ services:
     image: ghcr.io/mumbles1/gate-control:latest
     container_name: gate-control
     restart: unless-stopped
-    network_mode: host
     environment:
       NEXT_PUBLIC_APP_URL: "https://gates.example.com"
       ALERT_DATA_DIR: "/data"
@@ -12,7 +11,9 @@ services:
       ENABLE_MQTT_EXPLORER: "true"
       ACCESS_CONTROL_DATA_DIR: "/data/access-control"
       MQTT_EXPLORER_DATA_DIR: "/data/mqtt-explorer"
-      GATE_CONTROL_LISTEN_PORT: "3080"
+      GATE_CONTROL_LISTEN_PORT: "3000"
+    ports:
+      - "3000:3000"
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -34,7 +35,7 @@ services:
             en_us: Set to true to run the built-in MQTT Explorer
         - container: GATE_CONTROL_LISTEN_PORT
           description:
-            en_us: Host port used by the combined web interface
+            en_us: Internal port used by the combined web interface
       volumes:
         - container: /data
           description:
@@ -56,7 +57,7 @@ x-casaos:
     en_us: MQTT multi-gate monitoring and control PWA
   icon: https://raw.githubusercontent.com/mumbles1/gate-control/main/public/icon-512.png
   index: /
-  port_map: "3080"
+  port_map: "3000"
   scheme: http
   title:
     en_us: Gate Control

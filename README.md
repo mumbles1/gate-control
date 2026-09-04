@@ -24,7 +24,7 @@ The built-in broker is intentionally non-persistent. It is disabled by default. 
 
 MQTT Explorer is enabled by default with `ENABLE_MQTT_EXPLORER=true`. This combined build uses `smeagolworms4/mqtt-explorer:browser-1.0.3`, which provides AMD64 and ARM64 images.
 
-The combined deployment uses host networking so UHPPOTE UDP discovery can reach controllers on the LAN. Its web interface remains on port `3080`. Stop the separately running Access Control container before starting the combined container because both services otherwise try to use port `8080`. The standalone image and its files are retained and can be used again later.
+The combined deployment uses Docker bridge networking and publishes the single combined web interface on port `3000`. Gate Control proxies the built-in Access Control and MQTT Explorer services, so their internal web ports do not need to be exposed. Configure UHPPOTE controllers by their fixed LAN address; UDP broadcast discovery may not cross a Docker bridge. The standalone Access Control image and its files are retained and can be used again later.
 
 To reuse existing data without copying it, the combined Compose file mounts:
 
@@ -88,7 +88,7 @@ Give each operator only the minimum topic permissions required for their gates. 
    docker compose up -d --build
    ```
 
-3. Open `http://CASAOS_IP:3080` locally or publish port 3000 through Cloudflare Tunnel as the app hostname.
+3. Open `http://SERVER_IP:3000` locally or publish port 3000 through Cloudflare Tunnel as the app hostname.
 
 ## CasaOS deployment
 
@@ -101,7 +101,7 @@ ghcr.io/mumbles1/gate-control:v1.0.0
 
 In CasaOS, select **App Store → Install a customized app → Import Compose**, then import `docker-compose.casaos.yml`. Use `latest` to follow the current stable release, or replace `latest` with a specific version such as `v1.0.0` to pin the installation.
 
-The CasaOS app exposes local port 3080. Gate configuration stays in each browser. If Gate notifications are enabled, the container stores encrypted monitoring configuration and stable Web Push keys in `/DATA/AppData/gate-control`.
+The app exposes local port 3000. Gate configuration stays in each browser. If Gate notifications are enabled, the container stores encrypted monitoring configuration and stable Web Push keys in `/DATA/AppData/gate-control`.
 
 ### Complete CasaOS Compose example
 
@@ -111,15 +111,20 @@ Replace `YOUR_CASAOS_IP` with the LAN address of the CasaOS machine, then paste 
 name: gate-control
 services:
   gate-control:
-    image: ghcr.io/mumbles1/gate-control:v1.0.0
+    image: ghcr.io/mumbles1/gate-control:latest
     container_name: gate-control
     restart: unless-stopped
     environment:
-      NEXT_PUBLIC_APP_URL: "http://YOUR_CASAOS_IP:3080"
+      NEXT_PUBLIC_APP_URL: "http://YOUR_CASAOS_IP:3000"
       ALERT_DATA_DIR: "/data"
+      ACCESS_CONTROL_DATA_DIR: "/data/access-control"
+      MQTT_EXPLORER_DATA_DIR: "/data/mqtt-explorer"
+      ENABLE_LOCAL_BROKER: "false"
+      ENABLE_MQTT_EXPLORER: "true"
+      GATE_CONTROL_LISTEN_PORT: "3000"
     ports:
       - target: 3000
-        published: "3080"
+        published: "3000"
         protocol: tcp
     security_opt:
       - no-new-privileges:true
@@ -127,6 +132,8 @@ services:
       - ALL
     volumes:
       - /DATA/AppData/gate-control:/data
+      - /DATA/AppData/uhppoted-httpd:/data/access-control
+      - /DATA/AppData/mqtt-explorer:/data/mqtt-explorer
     x-casaos:
       envs:
         - container: NEXT_PUBLIC_APP_URL
@@ -145,13 +152,13 @@ x-casaos:
     en_us: MQTT multi-gate monitoring and control PWA
   icon: https://raw.githubusercontent.com/mumbles1/gate-control/main/public/icon-512.png
   index: /
-  port_map: "3080"
+  port_map: "3000"
   scheme: http
   title:
     en_us: Gate Control
 ```
 
-CasaOS WebUI values: scheme `http`, host port `3080`, container port `3000`, and path `/`. Mount `/DATA/AppData/gate-control` on the host to `/data` in the container so notification subscriptions and encryption keys survive updates.
+WebUI values: scheme `http`, host port `3000`, container port `3000`, and path `/`. Mount `/DATA/AppData/gate-control` on the host to `/data` in the container so notification subscriptions and encryption keys survive updates.
 
 Update a `latest` installation from the CasaOS interface, or from a terminal with:
 

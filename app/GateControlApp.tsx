@@ -316,13 +316,32 @@ function AutoTimerCard({ gate, runtime, onPublish }: { gate: GateConfiguration; 
 }
 
 function AppNav({ screen, onDashboard, onSetup, onMQTTExplorer, onAppSettings }: { screen: Screen; onDashboard: () => void; onSetup: () => void; onMQTTExplorer: () => void; onAppSettings: () => void }) {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape") setOpen(false); };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [open]);
+  const navigate = (action: () => void) => { setOpen(false); action(); };
   return (
-    <nav className="app-nav" aria-label="Primary navigation">
-      <button className={screen.name === "dashboard" || screen.name === "detail" ? "active" : ""} onClick={onDashboard}><span className="nav-gate-icon"><GateBrandIcon /></span><span>Gates</span></button>
-      <button className={screen.name === "setup" || screen.name === "editor" ? "active" : ""} onClick={onSetup}><SlidersHorizontal /><span>Gate setup</span></button>
-      <button className={screen.name === "mqttExplorer" ? "active" : ""} onClick={onMQTTExplorer}><Radio /><span>Explorer</span></button>
-      <button className={screen.name === "appSettings" ? "active" : ""} onClick={onAppSettings}><Settings /><span>App</span></button>
-    </nav>
+    <>
+      <button type="button" className="app-nav-toggle" aria-label={open ? "Close navigation" : "Open navigation"} aria-expanded={open} aria-controls="primary-navigation" onClick={() => setOpen((value) => !value)}>{open ? <X /> : <Menu />}</button>
+      {open && <button type="button" className="app-nav-backdrop" aria-label="Close navigation" onClick={() => setOpen(false)} />}
+      <nav id="primary-navigation" className={`app-nav ${open ? "app-nav--open" : ""}`} aria-label="Primary navigation" aria-hidden={!open}>
+        <header className="app-nav-header"><span className="brand-mark"><GateBrandIcon /></span><div><strong>Gate Control</strong><small>Turnage Automation</small></div></header>
+        <button className={screen.name === "dashboard" || screen.name === "detail" ? "active" : ""} onClick={() => navigate(onDashboard)}><span className="nav-gate-icon"><GateBrandIcon /></span><span>Gates</span></button>
+        <button className={screen.name === "setup" || screen.name === "editor" ? "active" : ""} onClick={() => navigate(onSetup)}><SlidersHorizontal /><span>Gate setup</span></button>
+        <a href="/access-control/"><AccessControlIcon /><span>Access Control</span></a>
+        <button className={screen.name === "mqttExplorer" ? "active" : ""} onClick={() => navigate(onMQTTExplorer)}><Radio /><span>MQTT Explorer</span></button>
+        <button className={screen.name === "appSettings" ? "active" : ""} onClick={() => navigate(onAppSettings)}><Settings /><span>App settings</span></button>
+      </nav>
+    </>
   );
 }
 
@@ -969,7 +988,7 @@ export function GateControlApp() {
                 <div className="setup-gate-copy"><h3>{gate.name}</h3><p>{gatePropertyLabel(gate)} / {gateLocationLabel(gate)} · {gate.simulated ? "Local simulator" : brokerUrl(gate.broker)}</p><span>{gate.simulated ? "No MQTT topics or broker connection" : gate.statusTopic}</span></div>
                 <ConnectionBadge runtime={live} simulated={gate.simulated} />
                 <div className="row-actions">
-                  {accessControlConfigured(gate.accessControl) && <button type="button" className="access-control-shortcut" onClick={() => setScreen({ name: "accessControl", gateId: gate.id })} aria-label={`Open Access Control for ${gate.name}`} title="Open Access Control - HTTP"><AccessControlIcon /></button>}
+                  {accessControlConfigured(gate.accessControl) && <a className="access-control-shortcut" href={accessControlUrl(gate.accessControl)} aria-label={`Open Access Control for ${gate.name}`} title="Open Access Control"><AccessControlIcon /></a>}
                   <button disabled={index === 0} onClick={() => moveGate(gate, -1)} aria-label={`Move ${gate.name} up`}><ArrowUp /></button>
                   <button disabled={index === sortedGates.length - 1} onClick={() => moveGate(gate, 1)} aria-label={`Move ${gate.name} down`}><ArrowDown /></button>
                   <button onClick={() => setScreen({ name: "editor", gate: cloneGate(gate), cloneDraft: true })} aria-label={`Clone ${gate.name}`}><Copy /></button>
