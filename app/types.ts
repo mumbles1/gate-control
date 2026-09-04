@@ -42,6 +42,7 @@ export interface MQTTActionMapping {
 }
 
 export interface AccessControlSettings {
+  mode: "off" | "integrated" | "external";
   protocol: "http" | "https";
   host: string;
   port: number;
@@ -49,6 +50,7 @@ export interface AccessControlSettings {
 }
 
 export const defaultAccessControlSettings = (): AccessControlSettings => ({
+  mode: "off",
   protocol: "http",
   host: "",
   port: 8080,
@@ -56,11 +58,18 @@ export const defaultAccessControlSettings = (): AccessControlSettings => ({
 });
 
 export function accessControlConfigured(settings?: AccessControlSettings): boolean {
-  return Boolean(settings?.host.trim());
+  if (!settings) return false;
+  const mode = settings.mode ?? (settings.host?.trim() ? "external" : "off");
+  if (mode === "integrated") return true;
+  return mode === "external" && Boolean(settings.host?.trim());
 }
 
 export function accessControlUrl(settings?: AccessControlSettings): string {
-  if (!settings?.host.trim()) return "";
+  if (!settings) return "";
+  const mode = settings.mode ?? (settings.host?.trim() ? "external" : "off");
+  if (mode === "off") return "";
+  if (mode === "integrated") return "/access-control/";
+  if (!settings.host.trim()) return "";
   const host = settings.host.trim().replace(/^https?:\/\//i, "").replace(/\/+$/g, "");
   const basePath = settings.basePath.trim().replace(/^\/+|\/+$/g, "");
   return `${settings.protocol}://${host}:${settings.port}${basePath ? `/${basePath}` : ""}`;
@@ -489,7 +498,8 @@ export function validateGate(gate: GateConfiguration, existing: GateConfiguratio
   if (!gate.name.trim()) errors.push("Gate name is required.");
   if (!gate.property.trim()) errors.push("Property is required.");
   if (!gate.location.trim()) errors.push("Location is required.");
-  if (accessControlConfigured(gate.accessControl)) {
+  if (gate.accessControl.mode === "external") {
+    if (!gate.accessControl.host.trim()) errors.push("Access control server IP or hostname is required in External server mode.");
     if (!Number.isInteger(gate.accessControl.port) || gate.accessControl.port < 1 || gate.accessControl.port > 65535) errors.push("Access control port must be between 1 and 65535.");
     try { new URL(accessControlUrl(gate.accessControl)); }
     catch { errors.push("Enter a valid access control server IP or hostname."); }
@@ -547,9 +557,15 @@ export function migrateGate(gate: GateConfiguration): GateConfiguration {
     if ([`${base}/`, `${base}/command`, `${base}/open`].includes(actions.open.topic)) actions.open.topic = base;
     if ([`${base}/`, `${base}/command`, `${base}/close`].includes(actions.close.topic)) actions.close.topic = base;
   }
+  const previousAccessControl = gate.accessControl as Partial<AccessControlSettings> | undefined;
+  const accessControl = {
+    ...defaultAccessControlSettings(),
+    ...(previousAccessControl ?? {}),
+    mode: previousAccessControl?.mode ?? (previousAccessControl?.host?.trim() ? "external" : "off"),
+  } as AccessControlSettings;
   return {
     ...gate,
-    accessControl: { ...defaultAccessControlSettings(), ...(gate.accessControl ?? {}) },
+    accessControl,
     broker: migrateBrokerSettings(gate.broker),
     property,
     propertyAlias: gate.propertyAlias?.trim() ?? "",

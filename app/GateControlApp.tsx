@@ -23,6 +23,7 @@ type Screen =
   | { name: "dashboard" }
   | { name: "setup" }
   | { name: "appSettings" }
+  | { name: "mqttExplorer" }
   | { name: "accessControl"; gateId: string }
   | { name: "detail"; gateId: string }
   | { name: "editor"; gate: GateConfiguration; cloneDraft?: boolean; advanced?: boolean };
@@ -55,6 +56,13 @@ function MosquittoIcon() {
 
 function AccessControlIcon() {
   return <img className="access-control-logo" src="/access-control-logo.svg" alt="" aria-hidden="true" />;
+}
+
+function IntegratedRedirect({ url, label }: { url: string; label: string }) {
+  useEffect(() => {
+    window.location.assign(url);
+  }, [url]);
+  return <main className="loading-screen"><AccessControlIcon /><p>Opening {label}…</p></main>;
 }
 
 function formatAge(timestamp?: number) {
@@ -307,11 +315,12 @@ function AutoTimerCard({ gate, runtime, onPublish }: { gate: GateConfiguration; 
   </>;
 }
 
-function AppNav({ screen, onDashboard, onSetup, onAppSettings }: { screen: Screen; onDashboard: () => void; onSetup: () => void; onAppSettings: () => void }) {
+function AppNav({ screen, onDashboard, onSetup, onMQTTExplorer, onAppSettings }: { screen: Screen; onDashboard: () => void; onSetup: () => void; onMQTTExplorer: () => void; onAppSettings: () => void }) {
   return (
     <nav className="app-nav" aria-label="Primary navigation">
       <button className={screen.name === "dashboard" || screen.name === "detail" ? "active" : ""} onClick={onDashboard}><span className="nav-gate-icon"><GateBrandIcon /></span><span>Gates</span></button>
       <button className={screen.name === "setup" || screen.name === "editor" ? "active" : ""} onClick={onSetup}><SlidersHorizontal /><span>Gate setup</span></button>
+      <button className={screen.name === "mqttExplorer" ? "active" : ""} onClick={onMQTTExplorer}><Radio /><span>Explorer</span></button>
       <button className={screen.name === "appSettings" ? "active" : ""} onClick={onAppSettings}><Settings /><span>App</span></button>
     </nav>
   );
@@ -916,7 +925,19 @@ export function GateControlApp() {
           {!gate.simulated && <AutoTimerCard gate={gate} runtime={live} onPublish={publishAdvancedGate} />}
           {live.lastPublish && live.lastPublish.at >= detailOpenedAt.current && <div className={`toast ${live.lastPublish.ok ? "toast--ok" : "toast--bad"}`} role="status"><span>{live.lastPublish.message}</span><X /></div>}
         </main>
-        <AppNav screen={screen} onDashboard={() => setScreen({ name: "dashboard" })} onSetup={() => setScreen({ name: "setup" })} onAppSettings={() => setScreen({ name: "appSettings" })} />
+        <AppNav screen={screen} onDashboard={() => setScreen({ name: "dashboard" })} onSetup={() => setScreen({ name: "setup" })} onMQTTExplorer={() => setScreen({ name: "mqttExplorer" })} onAppSettings={() => setScreen({ name: "appSettings" })} />
+      </div>
+    );
+  }
+
+  if (screen.name === "mqttExplorer") {
+    return (
+      <div className="integrated-tool-view">
+        <header className="integrated-tool-header">
+          <button type="button" className="secondary-button" onClick={() => setScreen({ name: "dashboard" })}><ArrowLeft /> Return</button>
+          <div><p className="eyebrow">Integrated tool</p><strong>MQTT Explorer</strong></div>
+        </header>
+        <iframe className="integrated-tool-frame" src="/mqtt-explorer/" title="MQTT Explorer" allow="clipboard-read; clipboard-write" />
       </div>
     );
   }
@@ -926,12 +947,7 @@ export function GateControlApp() {
     if (!gate || !accessControlConfigured(gate.accessControl)) {
       return <main className="loading-screen"><button type="button" className="secondary-button" onClick={() => setScreen({ name: "setup" })}><ArrowLeft /> Return to Gate Control</button></main>;
     }
-    const url = accessControlUrl(gate.accessControl);
-    return (
-      <div className="access-control-view">
-        <iframe className="access-control-view__frame" src={url} title={`Access Control for ${gate.name}`} allow="clipboard-read; clipboard-write" />
-      </div>
-    );
+    return <IntegratedRedirect url={accessControlUrl(gate.accessControl)} label={`Access Control for ${gate.name}`} />;
   }
 
   if (screen.name === "setup") {
@@ -965,7 +981,7 @@ export function GateControlApp() {
           </section>
           <section className="security-card"><span><Radio /></span><div><h2>Cloudflare + Mosquitto</h2><p>Use one secure WebSocket hostname per broker. Keep MQTT ACLs limited to each operator’s required status and action topics. The app automatically reconnects if Cloudflare rotates a WebSocket session.</p></div></section>
         </main>
-        <AppNav screen={screen} onDashboard={() => setScreen({ name: "dashboard" })} onSetup={() => setScreen({ name: "setup" })} onAppSettings={() => setScreen({ name: "appSettings" })} />
+        <AppNav screen={screen} onDashboard={() => setScreen({ name: "dashboard" })} onSetup={() => setScreen({ name: "setup" })} onMQTTExplorer={() => setScreen({ name: "mqttExplorer" })} onAppSettings={() => setScreen({ name: "appSettings" })} />
       </div>
     );
   }
@@ -1070,7 +1086,7 @@ export function GateControlApp() {
         </main>
         {qrShare && <div className="qr-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setQRShare(null); }}><section className="qr-dialog" role="dialog" aria-modal="true" aria-labelledby="gate-qr-title"><header><div><p className="eyebrow">Configuration transfer</p><h2 id="gate-qr-title">Share {qrShare.transferName}</h2></div><button type="button" className="icon-button" aria-label="Close QR code" onClick={() => setQRShare(null)}><X /></button></header><img src={qrShare.dataUrl} alt={`QR code for sharing ${qrShare.transferName}`} /><p>In the installed Gate Control app on the iPhone, open App settings, select Scan QR, then import the shared configuration.</p><strong>Expires {new Date(qrShare.expiresAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</strong><a className="secondary-button" href={qrShare.url} target="_blank" rel="noreferrer"><QrCode /> Open link on this device</a></section></div>}
         {qrScannerOpen && <ConfigurationQRScanner onClose={() => setQRScannerOpen(false)} onScan={acceptScannedConfiguration} />}
-        <AppNav screen={screen} onDashboard={() => setScreen({ name: "dashboard" })} onSetup={() => setScreen({ name: "setup" })} onAppSettings={() => setScreen({ name: "appSettings" })} />
+        <AppNav screen={screen} onDashboard={() => setScreen({ name: "dashboard" })} onSetup={() => setScreen({ name: "setup" })} onMQTTExplorer={() => setScreen({ name: "mqttExplorer" })} onAppSettings={() => setScreen({ name: "appSettings" })} />
       </div>
     );
   }
@@ -1095,7 +1111,7 @@ export function GateControlApp() {
           </article>;
         })}</section>}
       </main>
-      <AppNav screen={screen} onDashboard={() => setScreen({ name: "dashboard" })} onSetup={() => setScreen({ name: "setup" })} onAppSettings={() => setScreen({ name: "appSettings" })} />
+      <AppNav screen={screen} onDashboard={() => setScreen({ name: "dashboard" })} onSetup={() => setScreen({ name: "setup" })} onMQTTExplorer={() => setScreen({ name: "mqttExplorer" })} onAppSettings={() => setScreen({ name: "appSettings" })} />
     </div>
   );
 }

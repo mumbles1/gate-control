@@ -246,15 +246,18 @@ export function GateEditor({ initial, existing, cloneDraft, advanced = false, ru
         </section>
 
         <section className="form-card access-control-card">
-          <div className="section-heading"><span className="section-heading-logo"><img src="/access-control-logo.svg" alt="" aria-hidden="true" /></span><div><h2>Access control communication</h2><p>Optional shortcut to this gate's UHPPOTED Access Control HTTP server.</p></div></div>
+          <div className="section-heading"><span className="section-heading-logo"><img src="/access-control-logo.svg" alt="" aria-hidden="true" /></span><div><h2>Access control communication</h2><p>Connect this gate to the built-in Access Control service or an external server.</p></div></div>
           <div className="form-grid form-grid--two">
-            <label className="field"><span>Protocol</span><select value={gate.accessControl.protocol} onChange={(event) => setAccessControl("protocol", event.target.value)}><option value="http">http://</option><option value="https">https://</option></select></label>
-            <label className="field"><span>Server IP or hostname <em>optional</em></span><input inputMode="url" autoCapitalize="none" autoCorrect="off" spellCheck={false} placeholder="192.168.0.208" value={gate.accessControl.host} onChange={(event) => setAccessControl("host", event.target.value)} /></label>
-            <label className="field"><span>Port</span><input type="number" min={1} max={65535} inputMode="numeric" value={Number.isNaN(gate.accessControl.port) ? "" : gate.accessControl.port} onChange={(event) => setAccessControl("port", event.target.value === "" ? Number.NaN : Number(event.target.value))} /></label>
-            <label className="field"><span>Base path <em>optional</em></span><input autoCapitalize="none" autoCorrect="off" spellCheck={false} placeholder="Leave blank for the server home page" value={gate.accessControl.basePath} onChange={(event) => setAccessControl("basePath", event.target.value)} /></label>
+            <label className="field field--wide"><span>Access Control mode</span><select value={gate.accessControl.mode} onChange={(event) => setAccessControl("mode", event.target.value)}><option value="off">Not used for this gate</option><option value="integrated">Built-in Access Control</option><option value="external">External Access Control server</option></select></label>
+            {gate.accessControl.mode === "external" && <>
+              <label className="field"><span>Protocol</span><select value={gate.accessControl.protocol} onChange={(event) => setAccessControl("protocol", event.target.value)}><option value="http">http://</option><option value="https">https://</option></select></label>
+              <label className="field"><span>Server IP or hostname</span><input inputMode="url" autoCapitalize="none" autoCorrect="off" spellCheck={false} placeholder="192.168.0.208" value={gate.accessControl.host} onChange={(event) => setAccessControl("host", event.target.value)} /></label>
+              <label className="field"><span>Port</span><input type="number" min={1} max={65535} inputMode="numeric" value={Number.isNaN(gate.accessControl.port) ? "" : gate.accessControl.port} onChange={(event) => setAccessControl("port", event.target.value === "" ? Number.NaN : Number(event.target.value))} /></label>
+              <label className="field"><span>Base path <em>optional</em></span><input autoCapitalize="none" autoCorrect="off" spellCheck={false} placeholder="Leave blank for the server home page" value={gate.accessControl.basePath} onChange={(event) => setAccessControl("basePath", event.target.value)} /></label>
+            </>}
             <div className="broker-preview field--wide"><span>Effective address</span><code>{accessControlUrl(gate.accessControl) || "Not configured — shortcut will be hidden"}</code></div>
           </div>
-          <div className="credential-note"><img className="access-control-note-icon" src="/access-control-logo.svg" alt="" aria-hidden="true" /><span>When a server is configured, its Access Control shortcut appears only on this gate's Configured Endpoints card.</span></div>
+          <div className="credential-note"><img className="access-control-note-icon" src="/access-control-logo.svg" alt="" aria-hidden="true" /><span>When enabled, the Access Control shortcut appears only on this gate's Configured Endpoints card. Built-in mode stays inside the combined app.</span></div>
         </section>
 
         {!gate.simulated && <section className="form-card">

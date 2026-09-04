@@ -8,11 +8,19 @@ services:
     environment:
       NEXT_PUBLIC_APP_URL: "https://gates.example.com"
       ALERT_DATA_DIR: "/data"
+      ENABLE_LOCAL_BROKER: "false"
+      ENABLE_MQTT_EXPLORER: "true"
+      ACCESS_CONTROL_DATA_DIR: "/data/access-control"
+      MQTT_EXPLORER_DATA_DIR: "/data/mqtt-explorer"
     ports:
       - "3080:3000"
+      - "1883:1883"
+      - "9001:9001"
     security_opt:
       - no-new-privileges:true
     cap_drop:
       - ALL
     volumes:
       - ./data:/data
+      - ./data-access-control:/data/access-control
+      - ./data-mqtt-explorer:/data/mqtt-explorer

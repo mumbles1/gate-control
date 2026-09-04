@@ -4,32 +4,47 @@ services:
     image: ghcr.io/mumbles1/gate-control:latest
     container_name: gate-control
     restart: unless-stopped
+    network_mode: host
     environment:
       NEXT_PUBLIC_APP_URL: "https://gates.example.com"
       ALERT_DATA_DIR: "/data"
-    ports:
-      - target: 3000
-        published: "3080"
-        protocol: tcp
+      ENABLE_LOCAL_BROKER: "false"
+      ENABLE_MQTT_EXPLORER: "true"
+      ACCESS_CONTROL_DATA_DIR: "/data/access-control"
+      MQTT_EXPLORER_DATA_DIR: "/data/mqtt-explorer"
+      GATE_CONTROL_LISTEN_PORT: "3080"
     security_opt:
       - no-new-privileges:true
     cap_drop:
       - ALL
     volumes:
       - /DATA/AppData/gate-control:/data
+      - /DATA/AppData/uhppoted-httpd:/data/access-control
+      - /DATA/AppData/mqtt-explorer:/data/mqtt-explorer
     x-casaos:
       envs:
         - container: NEXT_PUBLIC_APP_URL
           description:
             en_us: Public HTTPS URL for Gate Control
+        - container: ENABLE_LOCAL_BROKER
+          description:
+            en_us: Set to true to run the optional built-in Mosquitto broker
+        - container: ENABLE_MQTT_EXPLORER
+          description:
+            en_us: Set to true to run the built-in MQTT Explorer
+        - container: GATE_CONTROL_LISTEN_PORT
+          description:
+            en_us: Host port used by the combined web interface
       volumes:
         - container: /data
           description:
-            en_us: Encrypted schedule alert configuration and stable notification keys
-      ports:
-        - container: "3000"
+            en_us: Gate Control notification and transfer data
+        - container: /data/access-control
           description:
-            en_us: Web UI
+            en_us: Existing or new Access Control configuration and credential data
+        - container: /data/mqtt-explorer
+          description:
+            en_us: MQTT Explorer connection configuration
 x-casaos:
   architectures:
     - amd64

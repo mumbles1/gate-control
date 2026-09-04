@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+    <meta name="theme-color" content="#08171d" />
+    <title>Service starting | Gate Control</title>
+    <style>
+      :root { color-scheme: dark; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background:#08171d; color:#f5f8f8; }
+      * { box-sizing:border-box; }
+      body { min-height:100vh; min-height:100dvh; margin:0; display:grid; place-items:center; padding:24px; background:radial-gradient(circle at top,#14313b 0,#08171d 48%); }
+      main { width:min(460px,100%); padding:28px; border:1px solid #31505b; border-radius:20px; background:#10252e; box-shadow:0 20px 60px #0008; }
+      .mark { width:44px; height:44px; display:grid; place-items:center; border-radius:12px; background:#c1f43b; color:#08171d; font-size:24px; font-weight:900; }
+      h1 { margin:20px 0 8px; font-size:1.55rem; }
+      p { margin:0; color:#bdcbd0; line-height:1.55; }
+      nav { display:flex; gap:10px; margin-top:24px; }
+      a { flex:1; padding:12px 14px; border-radius:10px; text-align:center; text-decoration:none; font-weight:800; }
+      a:first-child { background:#c1f43b; color:#08171d; }
+      a:last-child { border:1px solid #42636e; color:#f5f8f8; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="mark">!</div>
+      <h1>The integrated service is not ready</h1>
+      <p>Gate Control is running, but this tool is still starting or has stopped. Wait a few seconds and retry. If it continues, check the combined app container log.</p>
+      <nav><a href="">Try again</a><a href="/">Return to Gate Control</a></nav>
+    </main>
+  </body>
+</html>

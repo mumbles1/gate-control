@@ -1,5 +1,42 @@
 # Gate Control
 
+## Combined app edition (v1.2)
+
+Gate Control now ships as one combined Docker image with a single installed-app experience:
+
+- Gate Control dashboard, gate setup, schedules, MQTT controls, notifications, and configuration transfer;
+- UHPPOTE Access Control running internally and opened through the Gate Control origin;
+- MQTT Explorer available from the main dock;
+- an optional local Mosquitto broker for sites that need one.
+
+The standalone Access Control image remains available. The combined image imports it as a build stage and does not modify or replace that standalone deployment.
+
+Persistent files share the `/data` mount but use separate directories:
+
+```text
+/data/
+|-- access-control/
+|-- mqtt-explorer/
+`-- gate-control notification and transfer data
+```
+
+The built-in broker is intentionally non-persistent. It is disabled by default. Set `ENABLE_LOCAL_BROKER=true` to enable MQTT on port `1883` and MQTT over WebSockets on port `9001`. Remote brokers remain fully supported.
+
+MQTT Explorer is enabled by default with `ENABLE_MQTT_EXPLORER=true`. This combined build uses `smeagolworms4/mqtt-explorer:browser-1.0.3`, which provides AMD64 and ARM64 images.
+
+The combined deployment uses host networking so UHPPOTE UDP discovery can reach controllers on the LAN. Its web interface remains on port `3080`. Stop the separately running Access Control container before starting the combined container because both services otherwise try to use port `8080`. The standalone image and its files are retained and can be used again later.
+
+To reuse existing data without copying it, the combined Compose file mounts:
+
+```yaml
+volumes:
+  - /DATA/AppData/gate-control:/data
+  - /DATA/AppData/uhppoted-httpd:/data/access-control
+  - /DATA/AppData/mqtt-explorer:/data/mqtt-explorer
+```
+
+Do not run the standalone and combined Access Control services against the same data directory simultaneously.
+
 Gate Control is an installable responsive web app for monitoring and controlling multiple gates through Mosquitto MQTT over secure WebSockets. It runs from Docker or CasaOS and connects each browser directly to the configured remote broker.
 
 ## What is included
