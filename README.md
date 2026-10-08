@@ -154,7 +154,7 @@ Review every generated topic before saving. Gate Control blocks a save if any MQ
 
 Gate Control's combined image includes the UHPPOTED Access Control HTTP service. Open **Access control** from the main navigation to manage controllers, doors, and credentials. Existing per-gate links to an external Access Control server remain available from each gate's **Configured Endpoints** card.
 
-On CasaOS, the combined image uses host networking so controller UDP discovery can reach the LAN. The Gate Control web UI remains at `http://CASAOS_IP:3080`; the built-in HTTPD also listens on port `8080`. Stop the separate `uhppoted-httpd` container before starting the combined image, because both services use the same network ports. Keep its data folder: the CasaOS compose file mounts `/DATA/AppData/uhppoted-httpd` into the combined image at `/data/access-control`, preserving its existing configuration and credentials. The combined image packages the latest published `uhppoted-httpd` image when Gate Control is built.
+On CasaOS, the combined image uses host networking so controller UDP discovery can reach the LAN. The Gate Control web UI listens on port `3000`; the built-in HTTPD also listens on port `8080`. Stop the separate `uhppoted-httpd` container before starting the combined image, because both services use the same network ports. Keep its data folder: the CasaOS compose file mounts `/DATA/AppData/uhppoted-httpd` into the combined image at `/data/access-control`, preserving its existing configuration and credentials. The combined image packages the latest published `uhppoted-httpd` image when Gate Control is built.
 
 ### Advanced gate settings
 

@@ -10,7 +10,7 @@ services:
       ALERT_DATA_DIR: "/data"
       ACCESS_CONTROL_DATA_DIR: "/data/access-control"
       UHPPOTED_CREDENTIALS_CSV: "/data/access-control/credentials.csv"
-      GATE_CONTROL_LISTEN_PORT: "3080"
+      GATE_CONTROL_LISTEN_PORT: "3000"
     network_mode: host
     security_opt:
       - no-new-privileges:true
