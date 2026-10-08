@@ -9,7 +9,7 @@ import {
 import { GateArtwork } from "./GateArtwork";
 import { GateEditor } from "./GateEditor";
 import { ConfigurationQRScanner } from "./ConfigurationQRScanner";
-import { APP_VERSION } from "./app-version";
+import { APP_BUILD, APP_VERSION } from "./app-version";
 import { useMQTTManager } from "./mqtt-service";
 import { gateStorage } from "./storage";
 import { createGateTransfer, decryptConfiguration, downloadConfiguration, encryptConfiguration, gateTransferQRCode, loadConfigurationFromMQTT, loadGateTransfer, publishConfigurationToMQTT, shareConfigurationLink } from "./configuration-transfer";
@@ -511,11 +511,12 @@ export function GateControlApp() {
     setUpdateBusy(true);
     setUpdateMessage("Checking for the latest version…");
     try {
-      if (!("serviceWorker" in navigator)) throw new Error("Updates are checked when the app is reopened.");
+      if (!("serviceWorker" in navigator)) throw new Error("To refresh the web app, close and reopen it. Update the CasaOS image separately in CasaOS.");
       const versionResponse = await fetch(`/api/health?updateCheck=${Date.now()}`, { cache: "no-store", signal: AbortSignal.timeout(5_000) });
       if (!versionResponse.ok) throw new Error("The app server could not be reached.");
-      const serverInfo = await versionResponse.json() as { version?: string };
+      const serverInfo = await versionResponse.json() as { version?: string; build?: string };
       const serverVersion = serverInfo.version;
+      const serverBuild = serverInfo.build;
       let registration = await navigator.serviceWorker.getRegistration();
       if (!registration) registration = await navigator.serviceWorker.register(`/sw.js?v=${APP_VERSION}`, { updateViaCache: "none" });
 
@@ -553,10 +554,14 @@ export function GateControlApp() {
         return;
       }
       if (serverVersion && serverVersion !== APP_VERSION) {
-        setUpdateMessage(`Version ${serverVersion} is available. Close and reopen Gate Control if it does not refresh automatically.`);
+        setUpdateMessage(`The running server is Gate Control ${serverVersion}${serverBuild ? ` (build ${serverBuild.slice(0, 7)})` : ""}. Close and reopen the app to load its files. CasaOS image updates must be installed in CasaOS.`);
         return;
       }
-      setUpdateMessage(`Gate Control ${APP_VERSION} is current.`);
+      if (serverBuild && serverBuild !== APP_BUILD) {
+        setUpdateMessage(`The running server has build ${serverBuild.slice(0, 7)}. Close and reopen the app to load its files. CasaOS image updates must be installed in CasaOS.`);
+        return;
+      }
+      setUpdateMessage(`Gate Control ${APP_VERSION} · build ${APP_BUILD.slice(0, 7)} is current on this server. This check does not pull a new CasaOS image.`);
     } catch (error) {
       setUpdateMessage(error instanceof Error ? error.message : "Could not check for updates.");
     } finally { setUpdateBusy(false); }
@@ -1073,7 +1078,7 @@ export function GateControlApp() {
               <p className="transfer-note"><strong>Security:</strong> Transfers include MQTT credentials and are not password protected. Share files and QR codes only with trusted devices, and restrict the configuration topic with Mosquitto ACLs. Full-app imports replace this device's gates; one-gate imports add or update only that gate. Push permission and notification device identity are never cloned. QR transfers expire after 10 minutes.</p>
             </div>
           </section>
-          <section className="security-card app-version-card"><span><GateBrandIcon /></span><div><h2>Gate Control</h2><p>Built for Turnage Automation gate integration systems. Configuration stays on this device unless notifications or configuration transfer are used.</p><small>Version {APP_VERSION}</small>{updateMessage && <p className="update-status" role="status" aria-live="polite">{updateMessage}</p>}</div><button type="button" className="secondary-button" disabled={updateBusy} onClick={() => void checkForAppUpdate()}><RefreshCw className={updateBusy ? "spin" : ""} /> {updateBusy ? "Checking…" : "Check for updates"}</button></section>
+          <section className="security-card app-version-card"><span><GateBrandIcon /></span><div><h2>Gate Control</h2><p>Built for Turnage Automation gate integration systems. Configuration stays on this device unless notifications or configuration transfer are used.</p><small>Version {APP_VERSION} · build {APP_BUILD.slice(0, 7)}</small><p className="update-help">This checks the web app on the running server. Pull and update the CasaOS image in CasaOS to install a newer release.</p>{updateMessage && <p className="update-status" role="status" aria-live="polite">{updateMessage}</p>}</div><button type="button" className="secondary-button" disabled={updateBusy} onClick={() => void checkForAppUpdate()}><RefreshCw className={updateBusy ? "spin" : ""} /> {updateBusy ? "Checking…" : "Check for updates"}</button></section>
         </main>
         {qrShare && <div className="qr-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setQRShare(null); }}><section className="qr-dialog" role="dialog" aria-modal="true" aria-labelledby="gate-qr-title"><header><div><p className="eyebrow">Configuration transfer</p><h2 id="gate-qr-title">Share {qrShare.transferName}</h2></div><button type="button" className="icon-button" aria-label="Close QR code" onClick={() => setQRShare(null)}><X /></button></header><img src={qrShare.dataUrl} alt={`QR code for sharing ${qrShare.transferName}`} /><p>In the installed Gate Control app on the iPhone, open App settings, select Scan QR, then import the shared configuration.</p><strong>Expires {new Date(qrShare.expiresAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</strong><a className="secondary-button" href={qrShare.url} target="_blank" rel="noreferrer"><QrCode /> Open link on this device</a></section></div>}
         {qrScannerOpen && <ConfigurationQRScanner onClose={() => setQRScannerOpen(false)} onScan={acceptScannedConfiguration} />}

@@ -1,5 +1,5 @@
-import { APP_VERSION } from "../../app-version";
+import { APP_BUILD, APP_VERSION } from "../../app-version";
 
 export function GET() {
-  return Response.json({ ok: true, service: "gate-control", version: APP_VERSION, at: Date.now() }, { headers: { "cache-control": "no-store" } });
+  return Response.json({ ok: true, service: "gate-control", version: APP_VERSION, build: APP_BUILD, at: Date.now() }, { headers: { "cache-control": "no-store" } });
 }
