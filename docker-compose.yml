@@ -10,7 +10,11 @@ services:
       ALERT_DATA_DIR: "/data"
       ACCESS_CONTROL_DATA_DIR: "/data/access-control"
       UHPPOTED_CREDENTIALS_CSV: "/data/access-control/credentials.csv"
-      GATE_CONTROL_LISTEN_PORT: "3000"
+      GATE_CONTROL_LISTEN_PORT: "${GATE_CONTROL_LISTEN_PORT:-3000}"
+      GATE_CONTROL_INTERNAL_PORT: "${GATE_CONTROL_INTERNAL_PORT:-3100}"
+      UHPPOTED_HTTP_PORT: "${UHPPOTED_HTTP_PORT:-8080}"
+      ALERT_MONITOR_PORT: "${ALERT_MONITOR_PORT:-3001}"
+      ALERT_MONITOR_URL: "http://127.0.0.1:${ALERT_MONITOR_PORT:-3001}"
     network_mode: host
     security_opt:
       - no-new-privileges:true

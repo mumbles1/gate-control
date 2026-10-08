@@ -1,8 +1,8 @@
 import { spawn } from "node:child_process";
 
 const command = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
-const appPort = process.platform === "win32" ? (process.env.PORT || "3000") : "3100";
-const app = spawn(command, ["exec", "vinext", "start", "--host", "0.0.0.0"], { stdio: "inherit", env: { ...process.env, PORT: appPort } });
+const appPort = process.platform === "win32" ? (process.env.PORT || "3000") : (process.env.GATE_CONTROL_INTERNAL_PORT || "3100");
+const app = spawn(command, ["exec", "vinext", "start", "--host", "127.0.0.1"], { stdio: "inherit", env: { ...process.env, PORT: appPort } });
 const alerts = spawn(process.execPath, ["server/notification-server.mjs"], { stdio: "inherit", env: process.env });
 const accessControl = process.platform === "win32" ? null : spawn("/app/server/start-access-control.sh", [], { stdio: "inherit", env: process.env });
 const gateway = process.platform === "win32" ? null : spawn("/app/server/start-gateway.sh", [], { stdio: "inherit", env: process.env });

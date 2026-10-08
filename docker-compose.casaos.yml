@@ -2,14 +2,17 @@ name: gate-control
 services:
   gate-control:
     image: ghcr.io/mumbles1/gate-control:latest
-    container_name: gate-control
     restart: unless-stopped
     environment:
       NEXT_PUBLIC_APP_URL: "https://gates.example.com"
       ALERT_DATA_DIR: "/data"
       ACCESS_CONTROL_DATA_DIR: "/data/access-control"
       UHPPOTED_CREDENTIALS_CSV: "/data/access-control/credentials.csv"
-      GATE_CONTROL_LISTEN_PORT: "3000"
+      GATE_CONTROL_LISTEN_PORT: "${GATE_CONTROL_LISTEN_PORT:-3000}"
+      GATE_CONTROL_INTERNAL_PORT: "${GATE_CONTROL_INTERNAL_PORT:-3100}"
+      UHPPOTED_HTTP_PORT: "${UHPPOTED_HTTP_PORT:-8080}"
+      ALERT_MONITOR_PORT: "${ALERT_MONITOR_PORT:-3001}"
+      ALERT_MONITOR_URL: "http://127.0.0.1:${ALERT_MONITOR_PORT:-3001}"
     network_mode: host
     security_opt:
       - no-new-privileges:true
@@ -26,6 +29,18 @@ services:
         - container: ACCESS_CONTROL_DATA_DIR
           description:
             en_us: Path for integrated Access Control configuration and credential data
+        - container: GATE_CONTROL_LISTEN_PORT
+          description:
+            en_us: Host port for the Gate Control web app (choose a unique port per instance)
+        - container: GATE_CONTROL_INTERNAL_PORT
+          description:
+            en_us: Local-only Gate Control app port (choose a unique port per instance)
+        - container: UHPPOTED_HTTP_PORT
+          description:
+            en_us: Host port for integrated Access Control (choose a unique port per instance)
+        - container: ALERT_MONITOR_PORT
+          description:
+            en_us: Local notification service port (choose a unique port per instance)
       volumes:
         - container: /data
           description:
@@ -33,6 +48,13 @@ services:
         - container: /data/access-control
           description:
             en_us: Existing Access Control configuration and credential data
+      ports:
+        - container: "3000"
+          description:
+            en_us: Gate Control web UI (set with GATE_CONTROL_LISTEN_PORT)
+        - container: "8080"
+          description:
+            en_us: Integrated Access Control HTTP service (set with UHPPOTED_HTTP_PORT)
 x-casaos:
   architectures:
     - amd64
@@ -44,7 +66,7 @@ x-casaos:
     en_us: Combined MQTT gate control and UHPPOTED access control
   icon: https://raw.githubusercontent.com/mumbles1/gate-control/main/public/icon-512.png
   index: /
-  port_map: "3000"
+  port_map: "${GATE_CONTROL_LISTEN_PORT:-3000}"
   scheme: http
   title:
     en_us: Gate Control

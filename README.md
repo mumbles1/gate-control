@@ -154,7 +154,18 @@ Review every generated topic before saving. Gate Control blocks a save if any MQ
 
 Gate Control's combined image includes the UHPPOTED Access Control HTTP service. Open **Access control** from the main navigation to manage controllers, doors, and credentials. Existing per-gate links to an external Access Control server remain available from each gate's **Configured Endpoints** card.
 
-On CasaOS, the combined image uses host networking so controller UDP discovery can reach the LAN. The Gate Control web UI listens on port `3000`; the built-in HTTPD also listens on port `8080`. Stop the separate `uhppoted-httpd` container before starting the combined image, because both services use the same network ports. Keep its data folder: the CasaOS compose file mounts `/DATA/AppData/uhppoted-httpd` into the combined image at `/data/access-control`, preserving its existing configuration and credentials. The combined image packages the latest published `uhppoted-httpd` image when Gate Control is built.
+On CasaOS, the combined image uses host networking so controller UDP discovery can reach the LAN. The ports are configurable for running multiple instances:
+
+| Setting | Default | Purpose |
+| --- | ---: | --- |
+| `GATE_CONTROL_LISTEN_PORT` | `3000` | Web UI port on the CasaOS host |
+| `UHPPOTED_HTTP_PORT` | `8080` | Integrated Access Control HTTP service port |
+| `ALERT_MONITOR_PORT` | `3001` | Local notification monitor port |
+| `GATE_CONTROL_INTERNAL_PORT` | `3100` | Local-only Gate Control app server port |
+
+Use a unique value for each setting in each instance. For example, a second instance can use `3002`, `8081`, `3003`, and `3101`, respectively. Open the second Web UI at `http://CASAOS_IP:3002`. In CasaOS, set these values under the app's environment settings. Also give each instance a unique app/project name (change the compose `name:` value) and separate host data directories: change `/DATA/AppData/gate-control` and `/DATA/AppData/uhppoted-httpd` to instance-specific paths. The second mount must still point to `/data/access-control` inside the container. Keep the existing Access Control data folder when upgrading the existing instance. Stop the separate `uhppoted-httpd` container if it is using one of the same host ports.
+
+The Gate Control app server binds to loopback, so `GATE_CONTROL_INTERNAL_PORT` is local to the CasaOS host and is not the browser URL. The integrated HTTPD port is also proxied through the Gate Control UI under `/access-control/`.
 
 ### Advanced gate settings
 
