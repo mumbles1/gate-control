@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  AlertTriangle, ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Bell, CalendarDays, Camera, ChevronRight, CircleDot, CircleSlash2, Clock3, CloudDownload, CloudUpload, Copy, Download, FlaskConical, QrCode, RefreshCw, Send, Share2, Smartphone, Square,
+  AlertTriangle, ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Bell, CalendarDays, Camera, ChevronRight, CircleDot, CircleSlash2, Clock3, CloudDownload, CloudUpload, Copy, Download, ExternalLink, FlaskConical, QrCode, RefreshCw, Send, Share2, Smartphone, Square,
   LayoutGrid, List, Menu, Monitor, Moon, Plus, Radio, Settings, SlidersHorizontal, Upload,
   Sun, Trash2, Wifi, WifiOff, X,
 } from "lucide-react";
@@ -929,6 +929,11 @@ export function GateControlApp() {
     const url = accessControlUrl(gate.accessControl);
     return (
       <div className="access-control-view">
+        <header className="access-control-view__bar">
+          <button type="button" className="secondary-button" onClick={() => setScreen({ name: "setup" })}><ArrowLeft /> Gate Control</button>
+          <div className="access-control-view__heading"><AccessControlIcon /><span><strong>Access Control</strong><small>{gate.name} · {url}</small></span></div>
+          <a className="secondary-button access-control-view__open" href={url} target="_blank" rel="noreferrer" aria-label="Open Access Control in a new tab"><ExternalLink /><span>Open separately</span></a>
+        </header>
         <iframe className="access-control-view__frame" src={url} title={`Access Control for ${gate.name}`} allow="clipboard-read; clipboard-write" />
       </div>
     );

@@ -150,6 +150,12 @@ In **MQTT broker**, enter the WebSocket connection supplied by the broker admini
 
 Review every generated topic before saving. Gate Control blocks a save if any MQTT topic duplicates a topic assigned to another gate. Select **Test connection** to authenticate, subscribe to the configured status topics, and preview received values before saving.
 
+### Integrated Access Control
+
+In the gate editor's **Access control communication** section, enter the HTTPD server's browser-reachable address and port. For a CasaOS server, use protocol `http`, its LAN IP as the host, and port `8080`. Leave Base path blank for the server home page. Save the gate, then use the Access Control icon on its **Configured Endpoints** card.
+
+Gate Control embeds the configured HTTPD web app. Its controller discovery, add/delete, configuration, and IP-change controls come from the `ghcr.io/mumbles1/uhppoted-httpd` container. Updating Gate Control does not update that server; pull/recreate the HTTPD container to receive its latest UI and backend. The embedded view includes a **Gate Control** return button and an option to open HTTPD separately.
+
 ### Advanced gate settings
 
 Press and hold a gate's **Edit** button for five seconds to open **Advanced gate settings**. This page contains primary commands, broker status, traffic, automatic timer, RTC clock, input/output status fields, safety controls, live subscribed values, and gate-state mapping.
