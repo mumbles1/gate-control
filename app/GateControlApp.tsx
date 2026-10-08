@@ -928,9 +928,11 @@ export function GateControlApp() {
       return <main className="loading-screen"><button type="button" className="secondary-button" onClick={() => setScreen({ name: "setup" })}><ArrowLeft /> Return to Gate Control</button></main>;
     }
     const url = gate ? accessControlUrl(gate.accessControl) : "/access-control/";
+    const returnTo = gate ? { name: "setup" as const } : { name: "dashboard" as const };
     return (
       <div className="access-control-view">
         <header className="access-control-view__bar">
+          <button type="button" className="secondary-button" onClick={() => setScreen(returnTo)}><ArrowLeft /> Gate Control</button>
           <div className="access-control-view__heading"><AccessControlIcon /><span><strong>Access Control</strong><small>{gate ? `${gate.name} · ${url}` : "Built in · controller management"}</small></span></div>
           <a className="secondary-button access-control-view__open" href={url} target="_blank" rel="noreferrer" aria-label="Open Access Control in a new tab"><ExternalLink /><span>Open separately</span></a>
         </header>
