@@ -152,9 +152,9 @@ Review every generated topic before saving. Gate Control blocks a save if any MQ
 
 ### Integrated Access Control
 
-In the gate editor's **Access control communication** section, enter the HTTPD server's browser-reachable address and port. For a CasaOS server, use protocol `http`, its LAN IP as the host, and port `8080`. Leave Base path blank for the server home page. Save the gate, then use the Access Control icon on its **Configured Endpoints** card.
+Gate Control's combined image includes the UHPPOTED Access Control HTTP service. Open **Access control** from the main navigation to manage controllers, doors, and credentials. Existing per-gate links to an external Access Control server remain available from each gate's **Configured Endpoints** card.
 
-Gate Control embeds the configured HTTPD web app. Its controller discovery, add/delete, configuration, and IP-change controls come from the `ghcr.io/mumbles1/uhppoted-httpd` container. Updating Gate Control does not update that server; pull/recreate the HTTPD container to receive its latest UI and backend. The embedded view includes a **Gate Control** return button and an option to open HTTPD separately.
+On CasaOS, the combined image uses host networking so controller UDP discovery can reach the LAN. The Gate Control web UI remains at `http://CASAOS_IP:3080`; the built-in HTTPD also listens on port `8080`. Stop the separate `uhppoted-httpd` container before starting the combined image, because both services use the same network ports. Keep its data folder: the CasaOS compose file mounts `/DATA/AppData/uhppoted-httpd` into the combined image at `/data/access-control`, preserving its existing configuration and credentials. The combined image packages the latest published `uhppoted-httpd` image when Gate Control is built.
 
 ### Advanced gate settings
 

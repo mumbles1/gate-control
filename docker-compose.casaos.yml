@@ -7,29 +7,32 @@ services:
     environment:
       NEXT_PUBLIC_APP_URL: "https://gates.example.com"
       ALERT_DATA_DIR: "/data"
-    ports:
-      - target: 3000
-        published: "3080"
-        protocol: tcp
+      ACCESS_CONTROL_DATA_DIR: "/data/access-control"
+      UHPPOTED_CREDENTIALS_CSV: "/data/access-control/credentials.csv"
+      GATE_CONTROL_LISTEN_PORT: "3080"
+    network_mode: host
     security_opt:
       - no-new-privileges:true
     cap_drop:
       - ALL
     volumes:
       - /DATA/AppData/gate-control:/data
+      - /DATA/AppData/uhppoted-httpd:/data/access-control
     x-casaos:
       envs:
         - container: NEXT_PUBLIC_APP_URL
           description:
             en_us: Public HTTPS URL for Gate Control
+        - container: ACCESS_CONTROL_DATA_DIR
+          description:
+            en_us: Path for integrated Access Control configuration and credential data
       volumes:
         - container: /data
           description:
             en_us: Encrypted schedule alert configuration and stable notification keys
-      ports:
-        - container: "3000"
+        - container: /data/access-control
           description:
-            en_us: Web UI
+            en_us: Existing Access Control configuration and credential data
 x-casaos:
   architectures:
     - amd64
@@ -38,7 +41,7 @@ x-casaos:
   author: Turnage Automation
   category: Home Automation
   description:
-    en_us: MQTT multi-gate monitoring and control PWA
+    en_us: Combined MQTT gate control and UHPPOTED access control
   icon: https://raw.githubusercontent.com/mumbles1/gate-control/main/public/icon-512.png
   index: /
   port_map: "3080"

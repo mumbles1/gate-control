@@ -254,7 +254,7 @@ export function GateEditor({ initial, existing, cloneDraft, advanced = false, ru
             <label className="field"><span>Base path <em>optional</em></span><input autoCapitalize="none" autoCorrect="off" spellCheck={false} placeholder="Leave blank for the server home page" value={gate.accessControl.basePath} onChange={(event) => setAccessControl("basePath", event.target.value)} /></label>
             <div className="broker-preview field--wide"><span>Effective address</span><code>{accessControlUrl(gate.accessControl) || "Not configured — shortcut will be hidden"}</code></div>
           </div>
-          <div className="credential-note"><img className="access-control-note-icon" src="/access-control-logo.svg" alt="" aria-hidden="true" /><span>Gate Control embeds the configured Access Control HTTP server here. Enter an address this browser can reach, such as the CasaOS LAN IP and port 8080. Controller management and IP-change tools are supplied by that server; update its container to receive its latest changes.</span></div>
+          <div className="credential-note"><img className="access-control-note-icon" src="/access-control-logo.svg" alt="" aria-hidden="true" /><span>The combined Gate Control image includes Access Control. Open it from the Access control button in the main navigation. These settings remain available for a gate that uses a separate Access Control server.</span></div>
         </section>
 
         {!gate.simulated && <section className="form-card">
