@@ -1,0 +1,91 @@
+/* Make the legacy Access Control pages usable inside a phone-sized iframe. */
+@media (max-width: 700px) {
+  html,
+  body,
+  #content {
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    min-height: 0;
+  }
+
+  #content {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      "header"
+      "left"
+      "content"
+      "footer";
+  }
+
+  header {
+    min-width: 0;
+    min-height: 48px;
+    padding-right: 0;
+  }
+
+  header #logo {
+    width: 48px;
+    height: 48px;
+    padding: 4px;
+  }
+
+  #user {
+    position: absolute;
+    top: max(8px, env(safe-area-inset-top));
+    right: max(8px, env(safe-area-inset-right));
+  }
+
+  nav {
+    min-width: 0;
+    max-width: calc(100% - 16px);
+    overflow-x: auto;
+    margin: 0 8px 4px;
+    border-radius: 4px;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  nav ul {
+    display: flex;
+    width: max-content;
+    min-width: 100%;
+    gap: 12px;
+    margin: 0;
+    padding: 8px 10px;
+    box-sizing: border-box;
+  }
+
+  nav ul li {
+    flex: 0 0 auto;
+    padding: 3px 0;
+    white-space: nowrap;
+    font-size: 0.78em;
+  }
+
+  main {
+    min-width: 0;
+    min-height: 0;
+    overflow: auto;
+    margin: 0 4px;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  main #container {
+    width: 100%;
+    max-width: 100%;
+    max-height: 100%;
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  div.tabular {
+    max-width: 100%;
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  footer {
+    padding-bottom: max(6px, env(safe-area-inset-bottom));
+  }
+}

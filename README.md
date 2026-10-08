@@ -20,11 +20,13 @@ Use Cloudflare Tunnel rather than router port forwarding. The tunnel makes outbo
 
 ```text
 gates.example.com             -> http://gate-control:3000
-gate-one-mqtt.example.com     -> http://CASAOS_LAN_IP:9001
-gate-two-mqtt.example.com     -> http://CASAOS_LAN_IP:9002
+gate-one-mqtt.example.com     -> http://CASAOS_LAN_IP:29001
+gate-two-mqtt.example.com     -> http://CASAOS_LAN_IP:29002
 ```
 
-Mosquitto WebSocket listeners begin with an HTTP Upgrade request, so their Cloudflare Tunnel service is `http://`, while users configure `wss://gate-one-mqtt.example.com` in Gate Control. Cloudflare WebSockets must be enabled. Do not configure a Cloudflare Access login in front of MQTT hostnames unless the MQTT browser client can satisfy that separate authentication layer; use Mosquitto username/password and topic ACLs instead.
+For each MQTT hostname, configure a Cloudflare Tunnel public hostname whose service points to the broker's **internal WebSocket listener**, for example `http://192.168.0.208:29001`. This is the tunnel's origin-side address. In Gate Control, connect to the public hostname using **WSS**, **port `443`**, and **base path `mqtt`** (for example, `wss://gate-one-mqtt.example.com:443/mqtt`). The browser connects to Cloudflare on 443; Cloudflare Tunnel forwards the WebSocket upgrade to the internal listener on 29001. Do not enter 29001 as the Gate Control port when using the Cloudflare hostname.
+
+Cloudflare supports WebSockets by default; there may be no separate WebSockets toggle in the dashboard. The origin listener must speak MQTT over WebSockets, and the path must match its configured WebSocket path (Gate Control defaults to `mqtt`). Do not configure a Cloudflare Access login in front of MQTT hostnames unless the MQTT browser client can satisfy that separate authentication layer; use Mosquitto username/password and topic ACLs instead.
 
 An example locally managed tunnel file is provided in `cloudflared-config.example.yml`. Replace all example hostnames, LAN addresses, and the tunnel UUID.
 
@@ -137,11 +139,11 @@ The same setup screen works on phones. Each configured gate includes controls fo
 
 In **Identity & behavior**, enter the gate name, Property, Location, animation style, and graphic tap action. Property and Location are case-sensitive and are used to build the Turnage Automation topic defaults.
 
-In **MQTT broker**, enter the WebSocket connection supplied by the broker administrator:
+In **MQTT broker**, enter the WebSocket connection supplied by the broker administrator. For a Cloudflare Tunnel public hostname, use the public WSS endpoint; the tunnel's internal origin port is not the port entered here:
 
-- Protocol: normally `wss://` for remote access or `ws://` for trusted LAN testing
+- Protocol: `wss://` with a Cloudflare Tunnel hostname; `ws://` for trusted LAN testing
 - Host: broker hostname or LAN IP address
-- Port: the Mosquitto WebSocket listener port
+- Port: `443` for a Cloudflare Tunnel hostname; otherwise the directly reachable Mosquitto WebSocket listener port
 - Base path: normally `mqtt`
 - Encryption and certificate validation: enable both for `wss://`
 - Username and password: use an MQTT account restricted to this gate's topics
