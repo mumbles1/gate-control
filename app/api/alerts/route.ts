@@ -1,4 +1,4 @@
-const monitorUrl = process.env.ALERT_MONITOR_URL || "http://127.0.0.1:3001";
+const monitorUrl = process.env.ALERT_MONITOR_URL || `http://127.0.0.1:${process.env.ALERT_MONITOR_PORT || "3001"}`;
 
 async function proxy(request: Request) {
   try {
