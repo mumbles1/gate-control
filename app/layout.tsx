@@ -16,15 +16,10 @@ export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? "https://gates.example.com"),
   title: "Gate Control — Turnage Automation",
   description: "Turnage Automation multi-gate MQTT operations console.",
-  manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
     title: "Gate Control",
-  },
-  icons: {
-    icon: "/gate-icon.svg",
-    apple: "/apple-touch-icon.png",
   },
   openGraph: {
     title: "Gate Control",
@@ -50,6 +45,9 @@ export default function RootLayout({
     <html lang="en" data-theme="system" suppressHydrationWarning>
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+        <link rel="icon" href="/gate-icon.svg" />
+        <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+        <link rel="manifest" href="/manifest.webmanifest" />
         <script dangerouslySetInnerHTML={{ __html: `try{const theme=localStorage.getItem("gate-control-theme");if(theme==="system"||theme==="light"||theme==="dark")document.documentElement.dataset.theme=theme}catch{}` }} />
       </head>
       <body
