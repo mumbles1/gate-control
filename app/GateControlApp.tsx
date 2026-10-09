@@ -27,6 +27,9 @@ type Screen =
   | { name: "detail"; gateId: string }
   | { name: "editor"; gate: GateConfiguration; cloneDraft?: boolean; advanced?: boolean };
 
+type ConfigurationImportSource = "QR code" | "backup file" | "shared link" | "AirDrop" | "MQTT";
+type PendingConfigurationImport = { bundle: ConfigurationBundle; source: ConfigurationImportSource };
+
 declare global {
   interface Window {
     launchQueue?: {
@@ -340,6 +343,8 @@ export function GateControlApp() {
   const [transferScope, setTransferScope] = useState<"app" | "gate">("app");
   const [transferBusy, setTransferBusy] = useState(false);
   const [transferMessage, setTransferMessage] = useState("");
+  const [pendingConfigurationImport, setPendingConfigurationImport] = useState<PendingConfigurationImport | null>(null);
+  const [pendingImportError, setPendingImportError] = useState("");
   const [pendingGateTransferToken, setPendingGateTransferToken] = useState("");
   const [pendingTransferSource, setPendingTransferSource] = useState<"link" | "qr">("link");
   const [qrShare, setQRShare] = useState<{ dataUrl: string; url: string; transferName: string; expiresAt: number } | null>(null);
@@ -419,9 +424,11 @@ export function GateControlApp() {
     if (!token) return;
     setPendingGateTransferToken(token);
     setPendingTransferSource("link");
-    setTransferMessage(isIOSBrowserOutsideInstalledApp()
-      ? "AirDrop opened in Safari. Copy this transfer, open Gate Control from your Home Screen, then select Receive AirDrop in this app."
-      : "An AirDrop configuration is ready. Select Receive configuration in the AirDrop card.");
+    if (isIOSBrowserOutsideInstalledApp()) {
+      setTransferMessage("AirDrop opened in Safari. Copy this transfer, open Gate Control from your Home Screen, then select Receive AirDrop in this app.");
+    } else {
+      void preparePendingGateTransfer(token, "shared link");
+    }
     setScreen({ name: "appSettings" });
   }, [loaded]);
 
@@ -595,8 +602,6 @@ export function GateControlApp() {
       const remaining = gates.filter((item) => item.id !== gate.id);
       const errors = validateGate(gate, [...remaining, gate]);
       if (errors.length) throw new Error(`${gate.name || "Shared gate"}: ${errors[0]}`);
-      const replacing = gates.some((item) => item.id === gate.id);
-      if (!window.confirm(`${replacing ? "Replace" : "Add"} shared gate ${gate.name}?`)) return false;
       setGates((current) => {
         const existingIndex = current.findIndex((item) => item.id === gate.id);
         if (existingIndex >= 0) return current.map((item, index) => index === existingIndex ? { ...gate, order: item.order } : item).sort((a, b) => a.order - b.order);
@@ -609,7 +614,6 @@ export function GateControlApp() {
       const errors = validateGate(gate, imported);
       if (errors.length) throw new Error(`${gate.name || "Imported gate"}: ${errors[0]}`);
     }
-    if (!window.confirm(`Replace this device's ${gates.length} configured gate${gates.length === 1 ? "" : "s"} with ${imported.length} imported gate${imported.length === 1 ? "" : "s"}?`)) return false;
     const settings = bundle.settings;
     if (!settings || typeof settings !== "object") throw new Error("The imported app settings are invalid.");
     setGates(imported.map((gate, order) => ({ ...gate, order })));
@@ -678,19 +682,45 @@ export function GateControlApp() {
     finally { setTransferBusy(false); }
   };
 
-  const importPendingGateTransfer = async () => {
-    if (!pendingGateTransferToken) return;
-    setTransferBusy(true); setTransferMessage("Downloading shared configuration…");
+  const preparePendingGateTransfer = async (token: string, source: ConfigurationImportSource) => {
+    setTransferBusy(true); setTransferMessage("Loading shared configuration…");
     try {
-      const bundle = await decryptConfiguration(await loadGateTransfer(pendingGateTransferToken), "");
-      if (applyConfigurationBundle(bundle)) {
-        setPendingGateTransferToken("");
-        setPendingTransferSource("link");
-        window.history.replaceState({}, "", `${window.location.pathname}${window.location.hash}`);
-        setTransferMessage(bundle.scope === "gate" ? "Shared gate imported. Review and test its broker connection before operating it." : "Shared app configuration imported. Review and test each broker connection before operating gates.");
-      }
-    } catch (error) { setTransferMessage(error instanceof Error ? error.message : "Could not import the shared gate."); }
+      const bundle = await decryptConfiguration(await loadGateTransfer(token), "");
+      setPendingImportError("");
+      setPendingConfigurationImport({ bundle, source });
+      setTransferMessage("");
+    } catch (error) { setTransferMessage(error instanceof Error ? error.message : "Could not load the shared configuration."); }
     finally { setTransferBusy(false); }
+  };
+
+  const finishConfigurationImport = () => {
+    if (!pendingConfigurationImport) return;
+    try {
+      const { bundle } = pendingConfigurationImport;
+      if (!applyConfigurationBundle(bundle)) return;
+      setPendingConfigurationImport(null);
+      setPendingImportError("");
+      setPendingGateTransferToken("");
+      setPendingTransferSource("link");
+      const url = new URL(window.location.href);
+      url.searchParams.delete("gateTransfer");
+      window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+      setTransferMessage(bundle.scope === "gate"
+        ? "Shared gate imported. Review and test its broker connection before operating it."
+        : "Shared app configuration imported. Review and test each broker connection before operating gates.");
+    } catch (error) {
+      setPendingImportError(error instanceof Error ? error.message : "Configuration import failed.");
+    }
+  };
+
+  const cancelConfigurationImport = () => {
+    setPendingConfigurationImport(null);
+    setPendingImportError("");
+    setPendingGateTransferToken("");
+    setPendingTransferSource("link");
+    const url = new URL(window.location.href);
+    url.searchParams.delete("gateTransfer");
+    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
   };
 
   const acceptScannedConfiguration = (value: string) => {
@@ -701,7 +731,7 @@ export function GateControlApp() {
       setPendingGateTransferToken(token);
       setPendingTransferSource("qr");
       setQRScannerOpen(false);
-      setTransferMessage("QR code scanned. Select Import shared configuration to continue.");
+      void preparePendingGateTransfer(token, "QR code");
     } catch (error) {
       setQRScannerOpen(false);
       setTransferMessage(error instanceof Error ? error.message : "That QR code could not be read.");
@@ -715,7 +745,11 @@ export function GateControlApp() {
       if (!token) throw new Error("This is not a Gate Control AirDrop link.");
       setPendingGateTransferToken(token);
       setPendingTransferSource("link");
-      setTransferMessage("AirDrop link received. Select Receive configuration below to continue.");
+      if (isIOSBrowserOutsideInstalledApp()) {
+        setTransferMessage("Open Gate Control from your Home Screen, then select Receive AirDrop in this app.");
+      } else {
+        void preparePendingGateTransfer(token, "AirDrop");
+      }
     } catch (error) {
       setTransferMessage(error instanceof Error ? error.message : "That AirDrop link could not be read.");
     }
@@ -742,7 +776,9 @@ export function GateControlApp() {
     setTransferBusy(true); setTransferMessage("Installing configuration from file…");
     try {
       const bundle = await decryptConfiguration(await file.text(), "");
-      if (applyConfigurationBundle(bundle)) setTransferMessage("Configuration imported. Notification permission remains specific to this device.");
+      setPendingImportError("");
+      setPendingConfigurationImport({ bundle, source: "backup file" });
+      setTransferMessage("");
     } catch (error) { setTransferMessage(error instanceof Error ? error.message : "Configuration import failed."); }
     finally { setTransferBusy(false); if (transferFileInput.current) transferFileInput.current.value = ""; }
   };
@@ -773,7 +809,9 @@ export function GateControlApp() {
     try {
       const gate = transferGate(); if (!gate) throw new Error("Select a configured gate broker for the transfer.");
       const bundle = await decryptConfiguration(await loadConfigurationFromMQTT(gate, checkedTransferTopic()), "");
-      if (applyConfigurationBundle(bundle)) setTransferMessage("Retained MQTT configuration loaded. Notification permission remains specific to this device.");
+      setPendingImportError("");
+      setPendingConfigurationImport({ bundle, source: "MQTT" });
+      setTransferMessage("");
     } catch (error) { setTransferMessage(`MQTT load failed: ${error instanceof Error ? error.message : "Unknown error."}`); }
     finally { setTransferBusy(false); }
   };
@@ -1048,9 +1086,7 @@ export function GateControlApp() {
                     <div className="transfer-method-actions">
                       <button type="button" className="secondary-button" disabled={transferBusy} onClick={() => void shareWithAirDrop()}><Share2 /> Share with AirDrop</button>
                       <button type="button" className="secondary-button" disabled={transferBusy} onClick={() => void importAirDropLink()}><Upload /> Receive AirDrop in this app</button>
-                      {pendingGateTransferToken && pendingTransferSource === "link" && (isIOSBrowserOutsideInstalledApp()
-                        ? <button type="button" className="primary-button" disabled={transferBusy} onClick={() => void copyAirDropForInstalledApp()}><Copy /> Copy for Home Screen app</button>
-                        : <button type="button" className="primary-button" disabled={transferBusy} onClick={() => void importPendingGateTransfer()}><CloudDownload /> Receive configuration</button>)}
+                      {pendingGateTransferToken && pendingTransferSource === "link" && isIOSBrowserOutsideInstalledApp() && <button type="button" className="primary-button" disabled={transferBusy} onClick={() => void copyAirDropForInstalledApp()}><Copy /> Copy for Home Screen app</button>}
                     </div>
                     <p className="transfer-method-note">On iPhone, AirDrop first opens the link in Safari. Copy it, open the installed Gate Control app, and select Receive AirDrop in this app. Links expire after 10 minutes.</p>
                   </article>
@@ -1059,7 +1095,6 @@ export function GateControlApp() {
                     <div className="transfer-method-actions">
                       <button type="button" className="secondary-button" disabled={transferBusy || !gates.length} onClick={() => void shareGateByQRCode()}><QrCode /> Share QR</button>
                       <button type="button" className="secondary-button" disabled={transferBusy} onClick={() => { setTransferMessage(""); setQRScannerOpen(true); }}><Camera /> Scan QR</button>
-                      {pendingGateTransferToken && pendingTransferSource === "qr" && <button type="button" className="primary-button" disabled={transferBusy} onClick={() => void importPendingGateTransfer()}><CloudDownload /> Receive configuration</button>}
                     </div>
                   </article>
                 </div>
@@ -1080,6 +1115,7 @@ export function GateControlApp() {
           </section>
           <section className="security-card app-version-card"><span><GateBrandIcon /></span><div><h2>Gate Control</h2><p>Built for Turnage Automation gate integration systems. Configuration stays on this device unless notifications or configuration transfer are used.</p><small>Version {APP_VERSION} · build {APP_BUILD.slice(0, 7)}</small><p className="update-help">This checks the web app on the running server. Pull and update the CasaOS image in CasaOS to install a newer release.</p>{updateMessage && <p className="update-status" role="status" aria-live="polite">{updateMessage}</p>}</div><button type="button" className="secondary-button" disabled={updateBusy} onClick={() => void checkForAppUpdate()}><RefreshCw className={updateBusy ? "spin" : ""} /> {updateBusy ? "Checking…" : "Check for updates"}</button></section>
         </main>
+        {pendingConfigurationImport && <div className="configuration-import-backdrop"><section className="configuration-import-dialog" role="dialog" aria-modal="true" aria-labelledby="configuration-import-title"><header><div><p className="eyebrow">Import configuration · {pendingConfigurationImport.source}</p><h2 id="configuration-import-title">{pendingConfigurationImport.bundle.scope === "gate" ? "Import shared gate?" : "Replace app configuration?"}</h2></div><button type="button" className="icon-button" aria-label="Cancel import" onClick={cancelConfigurationImport}><X /></button></header><p>{pendingConfigurationImport.bundle.scope === "gate" ? `Add or update “${pendingConfigurationImport.bundle.gates[0]?.name ?? "shared gate"}” on this device?` : `Replace this device’s configuration with ${pendingConfigurationImport.bundle.gates.length} shared gate${pendingConfigurationImport.bundle.gates.length === 1 ? "" : "s"} and app settings?`}</p><p className="configuration-import-note">This includes broker credentials. Review and test the connection before operating gates.</p>{pendingImportError && <p className="configuration-import-error" role="alert">{pendingImportError}</p>}<footer><button type="button" className="secondary-button" onClick={cancelConfigurationImport}>Cancel</button><button type="button" className="primary-button" onClick={finishConfigurationImport}>{pendingConfigurationImport.bundle.scope === "gate" ? "Import gate" : "Replace configuration"}</button></footer></section></div>}
         {qrShare && <div className="qr-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setQRShare(null); }}><section className="qr-dialog" role="dialog" aria-modal="true" aria-labelledby="gate-qr-title"><header><div><p className="eyebrow">Configuration transfer</p><h2 id="gate-qr-title">Share {qrShare.transferName}</h2></div><button type="button" className="icon-button" aria-label="Close QR code" onClick={() => setQRShare(null)}><X /></button></header><img src={qrShare.dataUrl} alt={`QR code for sharing ${qrShare.transferName}`} /><p>In the installed Gate Control app on the iPhone, open App settings, select Scan QR, then import the shared configuration.</p><strong>Expires {new Date(qrShare.expiresAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</strong><a className="secondary-button" href={qrShare.url} target="_blank" rel="noreferrer"><QrCode /> Open link on this device</a></section></div>}
         {qrScannerOpen && <ConfigurationQRScanner onClose={() => setQRScannerOpen(false)} onScan={acceptScannedConfiguration} />}
         <AppNav screen={screen} onDashboard={() => setScreen({ name: "dashboard" })} onSetup={() => setScreen({ name: "setup" })} onAccessControl={() => setScreen({ name: "accessControl" })} onAppSettings={() => setScreen({ name: "appSettings" })} />
